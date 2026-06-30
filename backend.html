@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Blissé | Backend System</title>
+  <meta name="description" content="ระบบหลังบ้านสำหรับจัดการและตรวจสอบออเดอร์ — สงวนสิทธิ์การใช้งานสำหรับบุคลากรที่ได้รับอนุญาตเท่านั้น" />
+  <link rel="shortcut icon" href="https://lh3.googleusercontent.com/d/1Z6epAXtRcw0K6ad_32EjbYhuXSKm6JTq" />
+  <style>
+    :root{ --bg:#f5f6f7; --ink:#111827; }
+    body{ margin:0; padding:10px; font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto; }
+    header{text-align:center;margin-bottom:14px;margin-top:15px}
+    header .main{font-size:1.4rem;font-weight:700;letter-spacing:.6px}
+    header .sub{font-size:.9rem;font-weight:400;opacity:.6;margin-top:4px}
+    #frame{width:100%;height:calc(100dvh - 110px);border:0;background:#fff;display:none}
+    #loading{margin-top:14px;font-size:.9rem;opacity:.6}
+    /* ทำให้คำว่า Blissé ดูคลิกได้ */
+    #brandRefresh {
+  cursor: pointer;
+  color: inherit;          /* ใช้สีเดียวกับข้อความปกติ */
+  text-decoration: none;   /* ห้ามเป็นลิงก์ */
+  transition: opacity .2s; /* ทำให้ตอน hover ดูเนียน */
+}
+
+#brandRefresh:hover {
+  opacity: 0.6;            /* ให้รู้ว่ากดได้ แต่ไม่ดูเป็นลิงก์ */
+}
+
+  </style>
+</head>
+<body>
+<header>
+  <div class="main"><span id="brandRefresh">Blissé</span> Backend ©</div>
+
+  <div class="sub">ระบบหลังบ้านสำหรับการใช้งานภายในองค์กรเท่านั้น</div>
+  <div id="loading">กำลังโหลดระบบ...</div>
+</header>
+
+<iframe id="frame" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+  const GAS_EXEC_URL = "https://script.google.com/macros/s/AKfycbwrWUrm9qRq0009-RjUdBmu_j2Y2LsYK5uYtT2K9mc-eTy31CxOVLxAQ_Lu2eFUGIo/exec";
+  const MY_LIFF_ID   = "2010125469-vugCvunJ";
+
+  const frame   = document.getElementById("frame");
+  const loading = document.getElementById("loading");
+
+  (async () => {
+    try {
+      const usp = new URLSearchParams(location.search);
+      usp.delete("uid");
+
+      // ✅ กำหนด redirect uri กลับมาหน้าเดิม
+      const REDIRECT_URI = location.origin + location.pathname + (usp.toString() ? ("?" + usp.toString()) : "");
+
+      // ✅ ปุ่มรีเฟรชเมื่อคลิก "Blissé"
+      const brand = document.getElementById('brandRefresh');
+      brand?.addEventListener('click', (e) => {
+        e.preventDefault();
+        // ——— แบบ Soft refresh (แนะนำ): รีโหลดหน้านี้
+        location.replace(REDIRECT_URI);
+      });
+
+      // ✅ เริ่ม LIFF
+      await liff.init({ liffId: MY_LIFF_ID, withLoginOnExternalBrowser: true });
+
+      // ✅ ถ้าไม่ล็อกอิน ให้ redirect ไปหน้าล็อกอิน
+      if (!liff.isLoggedIn()) {
+        liff.login({ redirectUri: REDIRECT_URI });
+        return;
+      }
+
+      // ✅ ดึงข้อมูล user จาก LIFF
+      const profile = await liff.getProfile();
+      const decoded = liff.getDecodedIDToken?.() || {};
+      const uid = decoded.sub || profile.userId || "";
+
+      // ✅ ส่ง log เข้า Google Sheets
+      if (uid) {
+        fetch(GAS_EXEC_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            action: "logLiff",
+            userId: uid,
+            displayName: profile.displayName || "",
+            pictureUrl: profile.pictureUrl || ""
+          })
+        }).catch(() => {});
+      }
+
+      // ✅ ต่อพารามิเตอร์ uid เข้า iframe
+      const params = new URLSearchParams(usp);
+      if (uid) params.set("uid", uid);
+      frame.src = GAS_EXEC_URL + "?" + params.toString();
+
+    } catch (e) {
+      // fallback
+      frame.src = GAS_EXEC_URL;
+    } finally {
+      loading.style.display = "none";
+      frame.style.display = "block";
+    }
+  })();
+</script>
+<script src="./redirect.js"></script>
+
+</body>
+</html>
