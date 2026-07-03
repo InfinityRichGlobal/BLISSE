@@ -109,7 +109,7 @@
 <div id="toast-container" class="fixed bottom-5 right-5 z-[60] space-y-2"></div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbypdTB3lzWlBiM2ZYGgrSGHOxzfuiLyfQ-GVdlAR5O9aLx6_yM6XgtKWybz6Vy0DRo/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwElaS5cdJ5L3yLLfksKvPDo3NHtkjqa2DFGHzbMdkUMRUTZLR4R6gjD5pn2nVF4wiF/exec";
 
 let STATE = {
   uid: null, profile: null, role: null, approved: false,
@@ -384,10 +384,11 @@ function renderUploadQueue(){
     const isVideo = q.file.type.startsWith('video');
     const statusHtml = {
       pending: '<span class="text-gray-400">รอคิว</span>',
+      claimed: '<span class="text-gray-400">กำลังเริ่ม...</span>',
       uploading: `<span class="text-blue-500">กำลังอัปโหลด ${q.progress}%</span>`,
       saving: '<span class="text-blue-500">กำลังบันทึกลงชีต...</span>',
       success: '<span class="text-green-600">✅ สำเร็จ</span>',
-      fail: `<span class="text-red-500" title="${q.error||''}">❌ ล้มเหลว</span>`
+      fail: `<span class="text-red-500">❌ ล้มเหลว: ${q.error||'ไม่ทราบสาเหตุ'}</span>`
     }[q.status];
     return `
     <div class="progress-row">
@@ -404,15 +405,15 @@ function renderUploadQueue(){
   }).join('');
 }
 
+const MAX_CONCURRENT_UPLOADS = 3; // อัปโหลดพร้อมกันได้สูงสุดกี่ไฟล์ (กัน Apps Script quota ชน)
+
 async function startUpload(){
   if(uploadRunning) return; // กันกดซ้ำซ้อน
   uploadRunning = true;
   const tags = document.getElementById('upload-tags').value;
   let success=0, fail=0;
 
-  // ประมวลผลทีละไฟล์ที่ status ยังเป็น pending ณ ขณะนั้น (รองรับเพิ่มไฟล์ระหว่างทาง)
-  let item;
-  while((item = uploadQueue.find(q=>q.status==='pending'))){
+  async function runOne(item){
     item.status = 'uploading'; item.progress = 0;
     renderUploadQueue();
     const res = await uploadFileFetch(item.file, tags, (pct, phase)=>{
@@ -425,6 +426,19 @@ async function startUpload(){
     renderUploadQueue();
     document.getElementById('upload-summary').textContent = `สำเร็จ ${success} | ล้มเหลว ${fail}`;
   }
+
+  // worker pool: รันพร้อมกันได้สูงสุด MAX_CONCURRENT_UPLOADS ไฟล์ ที่เหลือรอคิวอัตโนมัติ
+  async function worker(){
+    let item;
+    while((item = uploadQueue.find(q=>q.status==='pending'))){
+      item.status = 'claimed'; // กันตัว worker อื่นหยิบไฟล์เดียวกันซ้ำ
+      await runOne(item);
+    }
+  }
+
+  const workers = Array.from({length: MAX_CONCURRENT_UPLOADS}, () => worker());
+  await Promise.all(workers);
+
   uploadRunning = false;
   if(success>0 || fail>0){
     toast(`อัปโหลดเสร็จรอบนี้: สำเร็จ ${success}, ล้มเหลว ${fail}`);
