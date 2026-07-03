@@ -82,18 +82,18 @@
 </div>
 
 <!-- LIGHTBOX -->
-<div id="lightbox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black bg-opacity-85">
-  <button onclick="closeLightbox()" class="absolute top-5 right-5 md:top-8 md:right-8 text-white text-3xl w-12 h-12 flex items-center justify-center z-10"><i class="fa-solid fa-xmark"></i></button>
-  <button onclick="navLightbox(-1)" class="absolute left-2 md:left-8 text-white text-2xl w-12 h-12 flex items-center justify-center z-10"><i class="fa-solid fa-chevron-left"></i></button>
-  <button onclick="navLightbox(1)" class="absolute right-2 md:right-8 text-white text-2xl w-12 h-12 flex items-center justify-center z-10"><i class="fa-solid fa-chevron-right"></i></button>
-  <div id="lightbox-content" class="max-w-[90%] max-h-[78%] flex flex-col items-center"></div>
-  <div class="absolute bottom-8 md:bottom-12 left-1/2 -translate-x-1/2 w-[94%] md:w-auto max-w-[95vw]">
-    <div id="lb-actionbar" class="flex flex-wrap justify-center items-center gap-1 bg-black bg-opacity-45 backdrop-blur-md rounded-2xl px-2 py-2 border border-white border-opacity-10">
+<div id="lightbox" class="fixed inset-0 z-50 hidden flex-col items-center bg-black bg-opacity-85 pt-20 md:pt-24 pb-6 overflow-y-auto">
+  <button onclick="closeLightbox()" class="fixed top-5 right-5 md:top-8 md:right-8 text-white text-3xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-xmark"></i></button>
+  <button onclick="navLightbox(-1)" class="fixed left-2 md:left-8 top-1/2 -translate-y-1/2 text-white text-2xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-chevron-left"></i></button>
+  <button onclick="navLightbox(1)" class="fixed right-2 md:right-8 top-1/2 -translate-y-1/2 text-white text-2xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-chevron-right"></i></button>
+  <div class="fixed top-5 md:top-8 left-4 md:left-8 right-20 md:right-24 z-20">
+    <div id="lb-actionbar" class="flex flex-wrap items-center gap-1 bg-black bg-opacity-45 backdrop-blur-md rounded-2xl px-2 py-2 border border-white border-opacity-10 w-fit">
       <a id="lb-download" href="#" class="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs md:text-sm rounded-xl hover:bg-white hover:bg-opacity-10 transition-colors"><i class="fa-solid fa-download"></i><span class="hidden sm:inline">ดาวน์โหลด</span></a>
       <a id="lb-drive" href="#" target="_blank" class="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs md:text-sm rounded-xl hover:bg-white hover:bg-opacity-10 transition-colors"><i class="fa-brands fa-google-drive"></i><span class="hidden sm:inline">Drive</span></a>
-      <div id="lb-admin-bar" class="hidden flex-wrap justify-center gap-1"></div>
+      <div id="lb-admin-bar" class="hidden flex-wrap gap-1"></div>
     </div>
   </div>
+  <div id="lightbox-content" class="max-w-[90%] max-h-[75vh] flex flex-col items-center mx-auto"></div>
 </div>
 
 <!-- ADMIN SLIDE PANEL -->
@@ -325,7 +325,7 @@ function renderThumbGrid(containerId, listKey, list){
     const hidden = f.show_hide==='hide';
     const shortcutsEnabled = String(STATE.config.show_admin_shortcuts).toLowerCase() !== 'false'; // default เปิด ถ้าไม่ได้ตั้งค่าไว้
     const hiddenBadge = hidden ? `<span class="absolute bottom-2 left-2 text-[10px] bg-black bg-opacity-60 text-white px-2 py-0.5 rounded-full z-10"><i class="fa-solid fa-eye-slash mr-1"></i>ซ่อน</span>` : '';
-    const videoBadge = f.file_type==='video' ? `<span class="absolute bottom-2 right-2 text-[11px] bg-black bg-opacity-60 text-white w-6 h-6 rounded-full flex items-center justify-center z-10"><i class="fa-solid fa-video"></i></span>` : '';
+    const videoBadge = f.file_type==='video' ? `<span class="absolute top-2 left-1/2 -translate-x-1/2 text-[11px] bg-black bg-opacity-60 text-white w-6 h-6 rounded-full flex items-center justify-center z-10"><i class="fa-solid fa-video"></i></span>` : '';
     const adminShortcuts = (STATE.role==='admin' && shortcutsEnabled) ? `
       <button onclick="event.stopPropagation(); quickToggleShow('${f.file_id}','${hidden?'show':'hide'}')" title="${hidden?'เปิดตา':'ปิดตา'}" class="absolute top-2 left-2 w-7 h-7 rounded-full bg-black bg-opacity-50 text-white text-xs flex items-center justify-center hover:bg-opacity-80 z-10">
         <i class="fa-solid ${hidden?'fa-eye-slash':'fa-eye'}"></i>
@@ -404,6 +404,8 @@ function openLightboxFromList(listKey, i){
 function closeLightbox(){
   document.getElementById('lightbox').classList.add('hidden');
   document.getElementById('lightbox').classList.remove('flex');
+  // ต้องล้าง iframe ออกจริงๆ ไม่ใช่แค่ซ่อนด้วย CSS เพราะวีดีโอ/เสียงข้างในจะเล่นต่อเบื้องหลัง
+  document.getElementById('lightbox-content').innerHTML = '';
 }
 function navLightbox(dir){
   const list = LISTS[currentLightboxKey] || [];
@@ -733,6 +735,9 @@ async function startUpload(){
   uploadRunning = false;
   if(success>0 || fail>0){
     toast(`อัปโหลดเสร็จรอบนี้: สำเร็จ ${success}, ล้มเหลว ${fail}`);
+    if(success>0){
+      api('notifyUploadBatch', { count: success+fail, success, fail, tags });
+    }
     await refreshData();
   }
 }
