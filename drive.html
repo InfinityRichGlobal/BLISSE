@@ -323,8 +323,9 @@ function renderThumbGrid(containerId, listKey, list){
       ? `https://lh3.googleusercontent.com/d/${f.file_id}`
       : `https://drive.google.com/thumbnail?id=${f.file_id}&sz=w400`;
     const hidden = f.show_hide==='hide';
+    const shortcutsEnabled = String(STATE.config.show_admin_shortcuts).toLowerCase() !== 'false'; // default เปิด ถ้าไม่ได้ตั้งค่าไว้
     const hiddenBadge = hidden ? `<span class="absolute bottom-2 left-2 text-[10px] bg-black bg-opacity-60 text-white px-2 py-0.5 rounded-full z-10"><i class="fa-solid fa-eye-slash mr-1"></i>ซ่อน</span>` : '';
-    const adminShortcuts = STATE.role==='admin' ? `
+    const adminShortcuts = (STATE.role==='admin' && shortcutsEnabled) ? `
       <button onclick="event.stopPropagation(); quickToggleShow('${f.file_id}','${hidden?'show':'hide'}')" title="${hidden?'เปิดตา':'ปิดตา'}" class="absolute top-2 left-2 w-7 h-7 rounded-full bg-black bg-opacity-50 text-white text-xs flex items-center justify-center hover:bg-opacity-80 z-10">
         <i class="fa-solid ${hidden?'fa-eye-slash':'fa-eye'}"></i>
       </button>
@@ -417,16 +418,10 @@ function renderLightbox(){
   if(f.file_type==='image'){
     content.innerHTML = `<img src="https://lh3.googleusercontent.com/d/${f.file_id}" class="max-w-full max-h-[78vh] rounded-2xl object-contain">`;
   }else{
-    // ใช้ <video> จริงก่อน (อัตราส่วนถูกต้อง + คอนโทรลเนทีฟ ไม่มี scrub bar ของ Drive มาบัง)
-    // ถ้าไฟล์ใหญ่/สตรีมตรงไม่ได้ ค่อย fallback เป็น iframe ของ Drive แทน
-    content.innerHTML = `
-      <video id="lb-video" controls playsinline class="max-w-[92vw] max-h-[78vh] rounded-2xl bg-black" style="display:block">
-        <source src="https://drive.google.com/uc?export=download&id=${f.file_id}" type="video/mp4">
-      </video>`;
-    const videoEl = document.getElementById('lb-video');
-    videoEl.onerror = () => {
-      content.innerHTML = `<iframe src="https://drive.google.com/file/d/${f.file_id}/preview" class="w-[90vw] max-w-[560px] aspect-video rounded-2xl" allow="autoplay"></iframe>`;
-    };
+    // ต้องใช้ iframe ของ Drive เป็นหลัก เพราะ Drive ไม่มีลิงก์สตรีมวีดีโอตรงที่ <video> เล่นได้จริง
+    // (uc?export=download คืนหน้ายืนยันดาวน์โหลด ไม่ใช่ไฟล์วีดีโอดิบ)
+    // ขยายกรอบให้ใหญ่ + ยืดหยุ่นทั้งแนวตั้ง/แนวนอน ให้ Drive letterbox เองได้ดีขึ้น
+    content.innerHTML = `<iframe src="https://drive.google.com/file/d/${f.file_id}/preview" class="w-[92vw] max-w-[600px] h-[78vh] max-h-[700px] rounded-2xl bg-black" allow="autoplay"></iframe>`;
   }
   document.getElementById('lb-download').href = `https://drive.google.com/uc?export=download&id=${f.file_id}`;
   document.getElementById('lb-drive').href = f.file_url;
