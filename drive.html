@@ -21,11 +21,11 @@
   .pill{ transition:all .2s ease; }
   .pill.active{ background:var(--text); color:#fff; }
   .gallery{ display:flex; flex-wrap:wrap; }
-  .gitem{ height:var(--thumb-h); flex-grow:1; margin:2px; position:relative; overflow:hidden; border-radius:.75rem; cursor:pointer; background:#fafafa; }
+  .gitem{ flex-grow:1; margin:2px; position:relative; overflow:hidden; border-radius:.75rem; cursor:pointer; background:#fafafa; }
   .gitem img,.gitem video{ height:100%; width:100%; object-fit:cover; display:block; }
-  .gitem .overlay{ position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,.55), transparent 40%); opacity:0; transition:opacity .2s; }
+  .gitem .overlay{ position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,.55), transparent 40%); opacity:0; transition:opacity .2s; pointer-events:none; }
   .gitem:hover .overlay{ opacity:1; }
-  .gitem .meta{ position:absolute; bottom:6px; left:8px; right:8px; color:#fff; font-size:11px; opacity:0; transition:opacity .2s; display:flex; justify-content:space-between; align-items:center; }
+  .gitem .meta{ position:absolute; bottom:6px; left:8px; right:8px; color:#fff; font-size:11px; opacity:0; transition:opacity .2s; display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .gitem:hover .meta{ opacity:1; }
   .toast{ animation:slideIn .3s ease; }
   @keyframes slideIn{ from{transform:translateX(120%)} to{transform:translateX(0)} }
@@ -90,6 +90,7 @@
   <div class="absolute bottom-6 flex gap-3 text-white text-sm">
     <a id="lb-download" href="#" class="px-4 py-2 bg-white bg-opacity-10 rounded-full hover:bg-opacity-20"><i class="fa-solid fa-download mr-1"></i>ดาวน์โหลด</a>
     <a id="lb-drive" href="#" target="_blank" class="px-4 py-2 bg-white bg-opacity-10 rounded-full hover:bg-opacity-20"><i class="fa-brands fa-google-drive mr-1"></i>เปิดใน Drive</a>
+    <div id="lb-admin-bar" class="hidden gap-3"></div>
   </div>
 </div>
 
@@ -102,6 +103,17 @@
       <button onclick="closePanel()" class="text-2xl w-8 h-8 flex items-center justify-center text-gray-400 hover:text-black">&times;</button>
     </div>
     <div id="panel-body" class="p-5"></div>
+  </div>
+</div>
+
+<!-- CONFIRM MODAL (แทน browser confirm ที่โดนบล็อกใน webview บางที่) -->
+<div id="confirm-modal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black bg-opacity-40 px-6">
+  <div class="bg-white rounded-2xl p-6 max-w-xs w-full shadow-2xl">
+    <p id="confirm-message" class="text-sm mb-5 text-center leading-relaxed"></p>
+    <div class="flex gap-2">
+      <button id="confirm-cancel" class="flex-1 border rounded-xl py-2 text-sm hover:bg-gray-50">ยกเลิก</button>
+      <button id="confirm-ok" class="flex-1 bg-black text-white rounded-xl py-2 text-sm hover:bg-gray-800">ยืนยัน</button>
+    </div>
   </div>
 </div>
 
@@ -196,7 +208,7 @@ function renderFilters(){
   const counts = computeCounts();
   const typeBar = document.getElementById('type-filters');
   typeBar.innerHTML = ['all','image','video'].map(t=>{
-    const label = t==='all' ? 'ทั้งหมด' : (t==='image'?'📷 ภาพ':'🎬 วีดีโอ');
+    const label = t==='all' ? 'ทั้งหมด' : (t==='image'?'<i class="fa-solid fa-image mr-1"></i>ภาพ':'<i class="fa-solid fa-video mr-1"></i>วีดีโอ');
     const n = counts.type[t] || 0;
     const countStr = STATE.showCounts ? ` (${n})` : '';
     return `<button onclick="setType('${t}')" class="pill px-4 py-1.5 rounded-full text-xs md:text-sm border ${STATE.activeType===t?'active':'border-gray-200 text-gray-600'}">${label}${countStr}</button>`;
@@ -239,8 +251,67 @@ function applyFilters(){
   let list = STATE.files;
   if(STATE.activeType !== 'all') list = list.filter(f=>f.file_type===STATE.activeType);
   if(STATE.activeTags.size>0) list = list.filter(f=>fileTags(f).some(t=>STATE.activeTags.has(t)));
-  STATE.currentSet = list;
   renderGallery(list);
+}
+
+// ---------------- GALLERY (ใช้ร่วมกันได้หลายจุด: หน้าแรก / sync thumbnails) ----------------
+const LISTS = {}; // เก็บ list แต่ละชุดไว้ให้ lightbox อ้างอิงได้ (gallery, sync)
+let currentLightboxKey = 'gallery';
+
+function renderGallery(list){
+  STATE.currentSet = list;
+  renderThumbGrid('gallery', 'gallery', list);
+}
+
+function renderThumbGrid(containerId, listKey, list){
+  LISTS[listKey] = list;
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  const h = parseInt(STATE.config.thumbnail_height_px) || 160;
+  if(list.length===0){ el.innerHTML = `<div class="w-full text-center py-16 text-gray-300 text-sm">ไม่พบไฟล์</div>`; return; }
+
+  el.innerHTML = list.map((f,i)=>{
+    const thumb = f.file_type==='image'
+      ? `https://lh3.googleusercontent.com/d/${f.file_id}`
+      : `https://drive.google.com/thumbnail?id=${f.file_id}&sz=w400`;
+    const hidden = f.show_hide==='hide';
+    const hiddenBadge = hidden ? `<span class="absolute bottom-2 left-2 text-[10px] bg-black bg-opacity-60 text-white px-2 py-0.5 rounded-full z-10"><i class="fa-solid fa-eye-slash mr-1"></i>ซ่อน</span>` : '';
+    const adminShortcuts = STATE.role==='admin' ? `
+      <button onclick="event.stopPropagation(); quickToggleShow('${f.file_id}','${hidden?'show':'hide'}')" title="${hidden?'เปิดตา':'ปิดตา'}" class="absolute top-2 left-2 w-7 h-7 rounded-full bg-black bg-opacity-50 text-white text-xs flex items-center justify-center hover:bg-opacity-80 z-10">
+        <i class="fa-solid ${hidden?'fa-eye-slash':'fa-eye'}"></i>
+      </button>
+      <button onclick="event.stopPropagation(); quickDelete('${f.file_id}')" title="ลบ" class="absolute top-2 right-2 w-7 h-7 rounded-full bg-red-500 bg-opacity-90 text-white text-xs flex items-center justify-center hover:bg-red-600 z-10">
+        <i class="fa-solid fa-trash"></i>
+      </button>` : '';
+
+    return `
+    <div class="gitem" style="height:${h}px; width:${Math.round(h*1.4)}px" onclick="openLightboxFromList('${listKey}', ${i})">
+      <img src="${thumb}" loading="lazy" onerror="this.src='https://via.placeholder.com/300x${h}?text=...'">
+      ${adminShortcuts}
+      ${hiddenBadge}
+      <div class="overlay"></div>
+      <div class="meta">
+        <span class="truncate">${f.file_name || ''}</span>
+        <span class="flex gap-2 shrink-0">
+          <a href="${f.file_url}" target="_blank" onclick="event.stopPropagation()" title="เปิดใน Drive"><i class="fa-brands fa-google-drive"></i></a>
+          <a href="https://drive.google.com/uc?export=download&id=${f.file_id}" onclick="event.stopPropagation()" title="ดาวน์โหลด"><i class="fa-solid fa-download"></i></a>
+        </span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function quickToggleShow(fileId, newState){
+  await api('bulkUpdate', { fileIds: [fileId], showHide: newState });
+  toast(newState==='show' ? 'เปิดตาแล้ว' : 'ปิดตาแล้ว');
+  await refreshData();
+}
+async function quickDelete(fileId){
+  const ok = await showConfirm('ลบไฟล์นี้ออกจากระบบ? (ไฟล์จริงใน Drive จะไม่ถูกลบ)');
+  if(!ok) return;
+  await api('deleteFiles', { fileIds: [fileId] });
+  toast('ลบไฟล์แล้ว');
+  await refreshData();
 }
 
 function pickRandom(){
@@ -248,29 +319,30 @@ function pickRandom(){
   renderGallery(shuffled);
 }
 
-// ---------------- GALLERY ----------------
-function renderGallery(list){
-  const g = document.getElementById('gallery');
-  if(list.length===0){ g.innerHTML = `<div class="w-full text-center py-20 text-gray-300 text-sm">ไม่พบไฟล์</div>`; return; }
-  g.innerHTML = list.map((f,i)=>{
-    const thumb = f.file_type==='image'
-      ? `https://lh3.googleusercontent.com/d/${f.file_id}`
-      : `https://drive.google.com/thumbnail?id=${f.file_id}&sz=w400`;
-    const hidden = f.show_hide==='hide' ? `<span class="absolute top-2 left-2 text-[10px] bg-black bg-opacity-60 text-white px-2 py-0.5 rounded-full"><i class="fa-solid fa-eye-slash mr-1"></i>ซ่อน</span>` : '';
-    return `
-    <div class="gitem" style="width:calc(var(--thumb-h) * 1.4)" onclick="openLightbox(${i})">
-      <img src="${thumb}" loading="lazy" onerror="this.src='https://via.placeholder.com/300x${STATE.config.thumbnail_height_px||160}?text=...'">
-      ${hidden}
-      <div class="overlay"></div>
-      <div class="meta"><span class="truncate">${f.file_name}</span>
-        <a href="${f.file_url}" target="_blank" onclick="event.stopPropagation()"><i class="fa-brands fa-google-drive"></i></a>
-      </div>
-    </div>`;
-  }).join('');
+// ---------------- CUSTOM CONFIRM (แทน window.confirm ที่บางเว็บวิวบล็อก) ----------------
+function showConfirm(message){
+  return new Promise(resolve=>{
+    const modal = document.getElementById('confirm-modal');
+    document.getElementById('confirm-message').textContent = message;
+    modal.classList.remove('hidden'); modal.classList.add('flex');
+    const okBtn = document.getElementById('confirm-ok');
+    const cancelBtn = document.getElementById('confirm-cancel');
+    const cleanup = (result)=>{
+      modal.classList.add('hidden'); modal.classList.remove('flex');
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      resolve(result);
+    };
+    const onOk = ()=>cleanup(true);
+    const onCancel = ()=>cleanup(false);
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+  });
 }
 
-// ---------------- LIGHTBOX ----------------
-function openLightbox(i){
+// ---------------- LIGHTBOX (ใช้ list ไหนก็ได้ผ่าน key: gallery / sync) ----------------
+function openLightboxFromList(listKey, i){
+  currentLightboxKey = listKey;
   STATE.lightboxIndex = i;
   renderLightbox();
   document.getElementById('lightbox').classList.remove('hidden');
@@ -281,12 +353,16 @@ function closeLightbox(){
   document.getElementById('lightbox').classList.remove('flex');
 }
 function navLightbox(dir){
-  const len = STATE.currentSet.length;
+  const list = LISTS[currentLightboxKey] || [];
+  if(list.length===0) return;
+  const len = list.length;
   STATE.lightboxIndex = (STATE.lightboxIndex + dir + len) % len;
   renderLightbox();
 }
 function renderLightbox(){
-  const f = STATE.currentSet[STATE.lightboxIndex];
+  const list = LISTS[currentLightboxKey] || [];
+  const f = list[STATE.lightboxIndex];
+  if(!f) return;
   const content = document.getElementById('lightbox-content');
   if(f.file_type==='image'){
     content.innerHTML = `<img src="https://lh3.googleusercontent.com/d/${f.file_id}" class="max-w-full max-h-[75vh] rounded-2xl object-contain">`;
@@ -295,6 +371,19 @@ function renderLightbox(){
   }
   document.getElementById('lb-download').href = `https://drive.google.com/uc?export=download&id=${f.file_id}`;
   document.getElementById('lb-drive').href = f.file_url;
+
+  const adminBar = document.getElementById('lb-admin-bar');
+  if(adminBar){
+    if(STATE.role==='admin'){
+      const hidden = f.show_hide==='hide';
+      adminBar.style.display = 'flex';
+      adminBar.innerHTML = `
+        <button onclick="quickToggleShow('${f.file_id}','${hidden?'show':'hide'}')" class="px-4 py-2 bg-white bg-opacity-10 rounded-full hover:bg-opacity-20"><i class="fa-solid ${hidden?'fa-eye-slash':'fa-eye'} mr-1"></i>${hidden?'เปิดตา':'ปิดตา'}</button>
+        <button onclick="quickDelete('${f.file_id}')" class="px-4 py-2 bg-red-500 bg-opacity-80 rounded-full hover:bg-opacity-100"><i class="fa-solid fa-trash mr-1"></i>ลบ</button>`;
+    } else {
+      adminBar.style.display = 'none';
+    }
+  }
 }
 document.addEventListener('keydown', e=>{
   if(document.getElementById('lightbox').classList.contains('hidden')) return;
@@ -337,7 +426,7 @@ function openPanel(type){
       <button onclick="startSync()" class="w-full bg-black text-white rounded-xl py-2 text-sm mb-4">เริ่มซิงค์</button>
       <div id="sync-folder-report" class="text-[11px] text-gray-400 mb-3 space-y-0.5"></div>
       <div id="sync-progress" class="text-sm mb-3"></div>
-      <div id="sync-thumbs" class="grid grid-cols-4 gap-1.5"></div>`;
+      <div id="sync-thumbs" class="gallery"></div>`;
   }
   if(type==='manage'){
     title.textContent = 'จัดการไฟล์ / ผู้ใช้';
@@ -389,8 +478,8 @@ function renderUploadQueue(){
       claimed: '<span class="text-gray-400">กำลังเริ่ม...</span>',
       uploading: `<span class="text-blue-500">กำลังอัปโหลด ${q.progress}%</span>`,
       saving: '<span class="text-blue-500">กำลังบันทึกลงชีต...</span>',
-      success: '<span class="text-green-600">✅ สำเร็จ</span>',
-      fail: `<span class="text-red-500">❌ ล้มเหลว: ${q.error||'ไม่ทราบสาเหตุ'}</span>`
+      success: '<span class="text-green-600"><i class="fa-solid fa-circle-check mr-1"></i>สำเร็จ</span>',
+      fail: `<span class="text-red-500"><i class="fa-solid fa-circle-xmark mr-1"></i>ล้มเหลว: ${q.error||'ไม่ทราบสาเหตุ'}</span>`
     }[q.status];
     return `
     <div class="progress-row">
@@ -506,6 +595,7 @@ async function startSync(){
   reportBox.innerHTML = ''; thumbBox.innerHTML = '';
 
   let done = false, totalAdded=0, totalDup=0, totalType=0, folderErrors=[], reportShown=false;
+  let syncedFiles = [];
   while(!done){
     const res = await api('sync', { folderIds: ids });
     if(res.error){ box.innerHTML = `<span class="text-red-500">${res.error}</span>`; return; }
@@ -516,20 +606,15 @@ async function startSync(){
     if(res.folderErrors && res.folderErrors.length) folderErrors = res.folderErrors;
 
     if(!reportShown && res.folderReport && res.folderReport.length){
-      reportBox.innerHTML = res.folderReport.map(r=>`<div>📁 ${r}</div>`).join('');
+      reportBox.innerHTML = res.folderReport.map(r=>`<div><i class="fa-solid fa-folder mr-1"></i>${r}</div>`).join('');
       reportShown = true;
     }
 
-    // โชว์ thumbnail สดของไฟล์ที่เพิ่งเพิ่มสำเร็จ
-    (res.addedFiles || []).forEach(f=>{
-      const thumb = f.type==='image'
-        ? `https://lh3.googleusercontent.com/d/${f.id}`
-        : `https://drive.google.com/thumbnail?id=${f.id}&sz=w200`;
-      const el = document.createElement('div');
-      el.className = 'aspect-square rounded-lg overflow-hidden border';
-      el.innerHTML = `<img src="${thumb}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/100?text=%F0%9F%93%84'">`;
-      thumbBox.appendChild(el);
-    });
+    // สะสมไฟล์ที่เพิ่งเพิ่มสำเร็จ แล้ว render เป็น thumbnail แบบเดียวกับหน้าแรก (คลิกดูได้เต็มออฟชั่น)
+    if(res.addedFiles && res.addedFiles.length){
+      syncedFiles = syncedFiles.concat(res.addedFiles);
+      renderThumbGrid('sync-thumbs', 'sync', syncedFiles);
+    }
 
     document.getElementById('sync-status').textContent =
       `กำลังประมวลผล ${res.progress}/${res.total} — เพิ่ม ${totalAdded} | ซ้ำ ${totalDup} | ไม่ใช่ภาพ/วีดีโอ ${totalType}`;
@@ -537,9 +622,9 @@ async function startSync(){
 
   let errHtml = '';
   if(folderErrors.length){
-    errHtml = `<div class="mt-2 text-red-500 text-xs">⚠️ บางโฟลเดอร์เข้าไม่ได้ (เช็คสิทธิ์ Drive):<br>${folderErrors.join('<br>')}</div>`;
+    errHtml = `<div class="mt-2 text-red-500 text-xs"><i class="fa-solid fa-triangle-exclamation mr-1"></i>บางโฟลเดอร์เข้าไม่ได้ (เช็คสิทธิ์ Drive):<br>${folderErrors.join('<br>')}</div>`;
   }
-  box.innerHTML += `<div class="mt-2 text-green-600 text-sm">✅ เสร็จสิ้น: เพิ่ม ${totalAdded} | ซ้ำ ${totalDup} | ไม่ใช่ภาพ/วีดีโอ ${totalType}</div>${errHtml}`;
+  box.innerHTML += `<div class="mt-2 text-green-600 text-sm"><i class="fa-solid fa-circle-check mr-1"></i>เสร็จสิ้น: เพิ่ม ${totalAdded} | ซ้ำ ${totalDup} | ไม่ใช่ภาพ/วีดีโอ ${totalType}</div>${errHtml}`;
   toast(`ซิงค์เสร็จ: เพิ่ม ${totalAdded} ไฟล์`);
   await refreshData();
 }
@@ -615,7 +700,7 @@ async function renderManagePanel(body){
 function renderManageFilters(){
   const typeBox = document.getElementById('manage-type-filters');
   typeBox.innerHTML = ['all','image','video'].map(t=>{
-    const label = t==='all'?'ทั้งหมด':(t==='image'?'📷 ภาพ':'🎬 วีดีโอ');
+    const label = t==='all'?'ทั้งหมด':(t==='image'?'<i class="fa-solid fa-image mr-1"></i>ภาพ':'<i class="fa-solid fa-video mr-1"></i>วีดีโอ');
     return `<button onclick="setManageType('${t}')" class="pill px-3 py-1 rounded-full text-[11px] border ${MANAGE.type===t?'active':'border-gray-200 text-gray-500'}">${label}</button>`;
   }).join('');
   const tagBox = document.getElementById('manage-tag-filters');
@@ -694,7 +779,8 @@ async function bulkSetShow(val){
 }
 async function bulkDelete(){
   const ids = getSelectedIds(); if(ids.length===0){ toast('ยังไม่ได้เลือกไฟล์','err'); return; }
-  if(!confirm(`ลบข้อมูล ${ids.length} ไฟล์ออกจากระบบ? (ไฟล์จริงใน Drive จะไม่ถูกลบ)`)) return;
+  const ok = await showConfirm(`ลบข้อมูล ${ids.length} ไฟล์ออกจากระบบ? (ไฟล์จริงใน Drive จะไม่ถูกลบ)`);
+  if(!ok) return;
   await api('deleteFiles', { fileIds: ids });
   toast(`ลบ ${ids.length} ไฟล์ออกจากระบบแล้ว`);
   await refreshData();
@@ -702,7 +788,8 @@ async function bulkDelete(){
 async function approveUser(uid, name, pic, role){
   await api('approveUser', { targetUid: uid, displayName: name, pictureUrl: pic, role });
   toast(`อนุมัติ ${name} เป็น ${role} แล้ว`);
-  openPanel('manage');
+  await refreshData();
+  if(!document.getElementById('admin-panel').classList.contains('hidden')) openPanel('manage');
 }
 
 window.onload = boot;
