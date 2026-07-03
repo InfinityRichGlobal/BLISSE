@@ -82,18 +82,18 @@
 </div>
 
 <!-- LIGHTBOX -->
-<div id="lightbox" class="fixed inset-0 z-50 hidden flex-col items-center bg-black bg-opacity-85 pt-20 md:pt-24 pb-6 overflow-y-auto">
-  <button onclick="closeLightbox()" class="fixed top-5 right-5 md:top-8 md:right-8 text-white text-3xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-xmark"></i></button>
-  <button onclick="navLightbox(-1)" class="fixed left-2 md:left-8 top-1/2 -translate-y-1/2 text-white text-2xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-chevron-left"></i></button>
-  <button onclick="navLightbox(1)" class="fixed right-2 md:right-8 top-1/2 -translate-y-1/2 text-white text-2xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-chevron-right"></i></button>
-  <div class="fixed top-5 md:top-8 left-4 md:left-8 right-20 md:right-24 z-20">
-    <div id="lb-actionbar" class="flex flex-wrap items-center gap-1 bg-black bg-opacity-45 backdrop-blur-md rounded-2xl px-2 py-2 border border-white border-opacity-10 w-fit">
+<div id="lightbox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black bg-opacity-85">
+  <button onclick="closeLightbox()" class="absolute top-5 right-5 md:top-8 md:right-8 text-white text-3xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-xmark"></i></button>
+  <button onclick="navLightbox(-1)" class="absolute left-2 md:left-8 top-1/2 -translate-y-1/2 text-white text-2xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-chevron-left"></i></button>
+  <button onclick="navLightbox(1)" class="absolute right-2 md:right-8 top-1/2 -translate-y-1/2 text-white text-2xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-chevron-right"></i></button>
+  <div id="lightbox-content" class="max-w-[90%] max-h-[72vh] flex flex-col items-center"></div>
+  <div class="absolute bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 w-[94%] md:w-auto max-w-[95vw] z-20">
+    <div id="lb-actionbar" class="flex flex-wrap justify-center items-center gap-1 bg-black bg-opacity-45 backdrop-blur-md rounded-2xl px-2 py-2 border border-white border-opacity-10">
       <a id="lb-download" href="#" class="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs md:text-sm rounded-xl hover:bg-white hover:bg-opacity-10 transition-colors"><i class="fa-solid fa-download"></i><span class="hidden sm:inline">ดาวน์โหลด</span></a>
       <a id="lb-drive" href="#" target="_blank" class="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs md:text-sm rounded-xl hover:bg-white hover:bg-opacity-10 transition-colors"><i class="fa-brands fa-google-drive"></i><span class="hidden sm:inline">Drive</span></a>
-      <div id="lb-admin-bar" class="hidden flex-wrap gap-1"></div>
+      <div id="lb-admin-bar" class="hidden flex-wrap justify-center gap-1"></div>
     </div>
   </div>
-  <div id="lightbox-content" class="max-w-[90%] max-h-[75vh] flex flex-col items-center mx-auto"></div>
 </div>
 
 <!-- ADMIN SLIDE PANEL -->
@@ -325,13 +325,13 @@ function renderThumbGrid(containerId, listKey, list){
     const hidden = f.show_hide==='hide';
     const shortcutsEnabled = String(STATE.config.show_admin_shortcuts).toLowerCase() !== 'false'; // default เปิด ถ้าไม่ได้ตั้งค่าไว้
     const hiddenBadge = hidden ? `<span class="absolute bottom-2 left-2 text-[10px] bg-black bg-opacity-60 text-white px-2 py-0.5 rounded-full z-10"><i class="fa-solid fa-eye-slash mr-1"></i>ซ่อน</span>` : '';
-    const videoBadge = f.file_type==='video' ? `<span class="absolute top-2 left-1/2 -translate-x-1/2 text-[11px] bg-black bg-opacity-60 text-white w-6 h-6 rounded-full flex items-center justify-center z-10"><i class="fa-solid fa-video"></i></span>` : '';
+    const videoBadge = f.file_type==='video' ? `<span class="absolute top-1.5 right-1.5 text-[10px] bg-black bg-opacity-60 text-white w-5 h-5 rounded-full flex items-center justify-center z-10 pointer-events-none"><i class="fa-solid fa-video"></i></span>` : '';
     const adminShortcuts = (STATE.role==='admin' && shortcutsEnabled) ? `
-      <button onclick="event.stopPropagation(); quickToggleShow('${f.file_id}','${hidden?'show':'hide'}')" title="${hidden?'เปิดตา':'ปิดตา'}" class="absolute top-2 left-2 w-7 h-7 rounded-full bg-black bg-opacity-50 text-white text-xs flex items-center justify-center hover:bg-opacity-80 z-10">
+      <button onclick="event.stopPropagation(); quickToggleShow('${f.file_id}','${hidden?'show':'hide'}')" title="${hidden?'เปิดตา':'ปิดตา'}" class="absolute top-1 left-1 w-6 h-6 rounded-full bg-black bg-opacity-50 text-white text-[10px] flex items-center justify-center hover:bg-opacity-80 z-20">
         <i class="fa-solid ${hidden?'fa-eye-slash':'fa-eye'}"></i>
       </button>
-      <button onclick="event.stopPropagation(); quickDelete('${f.file_id}')" title="ลบ" class="absolute top-2 right-2 w-7 h-7 rounded-full bg-red-500 bg-opacity-90 text-white text-xs flex items-center justify-center hover:bg-red-600 z-10">
-        <i class="fa-solid fa-trash"></i>
+      <button onclick="event.stopPropagation(); quickDelete('${f.file_id}')" title="ลบ" class="absolute bottom-1 left-1 w-6 h-6 rounded-full bg-red-500 bg-opacity-90 text-white text-[10px] flex items-center justify-center hover:bg-red-600 z-20">
+        <i class="fa-solid fa-xmark"></i>
       </button>` : '';
 
     return `
@@ -860,14 +860,14 @@ async function renderManagePanel(body){
     <div id="manage-tag-filters" class="flex flex-wrap gap-1.5 mb-3"></div>
 
     <div class="flex items-center justify-between mb-2">
-      <span class="text-xs text-gray-500">แสดง ${filtered.length} ไฟล์</span>
+      <span id="manage-count" class="text-xs text-gray-500">แสดง ${filtered.length} ไฟล์</span>
       <div class="flex gap-2">
         <button onclick="selectAllFiles(true)" class="text-xs underline">เลือกทั้งหมด</button>
         <button onclick="selectAllFiles(false)" class="text-xs underline">ยกเลิกเลือก</button>
       </div>
     </div>
 
-    <div id="manage-grid" class="grid grid-cols-4 gap-2 mb-3 max-h-64 overflow-y-auto border rounded-xl p-1.5"></div>
+    <div id="manage-grid" class="grid grid-cols-4 gap-2 mb-3 overflow-y-auto border rounded-xl p-1.5" style="max-height:60vh"></div>
 
     <div class="border rounded-xl p-3 mb-3">
       <div class="text-xs font-medium mb-2">จัดการ Tag ให้ไฟล์ที่เลือก</div>
@@ -936,17 +936,18 @@ function toggleManageTag(name){
 function renderManageGrid(){
   const grid = document.getElementById('manage-grid');
   const files = manageFilteredFiles();
-  document.querySelector('.text-gray-500.text-xs')?.textContent; // no-op safeguard
+  const countEl = document.getElementById('manage-count');
+  if(countEl) countEl.textContent = `แสดง ${files.length} ไฟล์`;
   grid.innerHTML = files.map(f=>{
     const thumb = f.file_type==='image'
       ? `https://lh3.googleusercontent.com/d/${f.file_id}`
       : `https://drive.google.com/thumbnail?id=${f.file_id}&sz=w200`;
     return `
-    <label class="relative block aspect-square rounded-lg overflow-hidden border border-gray-200 cursor-pointer group bg-gray-50">
+    <label class="relative block rounded-lg overflow-hidden border border-gray-200 cursor-pointer group bg-gray-50" style="aspect-ratio:1/1; min-height:70px">
       <input type="checkbox" class="file-check absolute top-1 left-1 z-10 w-4 h-4" value="${f.file_id}">
-      <img src="${thumb}" data-original="${thumb}" class="w-full h-full object-cover" onerror="handleThumbError(this, ${f.file_type==='video'})">
-      ${f.show_hide==='hide' ? `<span class="absolute bottom-1 right-1 text-[9px] bg-black bg-opacity-70 text-white px-1.5 py-0.5 rounded-full"><i class="fa-solid fa-eye-slash"></i></span>` : ''}
-      ${f.file_type==='video' ? `<span class="absolute top-1 right-1 text-[9px] bg-black bg-opacity-70 text-white px-1 py-0.5 rounded"><i class="fa-solid fa-video"></i></span>` : ''}
+      <img src="${thumb}" data-original="${thumb}" class="w-full h-full object-cover" style="position:absolute; inset:0" onerror="handleThumbError(this, ${f.file_type==='video'})">
+      ${f.show_hide==='hide' ? `<span class="absolute bottom-1 right-1 text-[9px] bg-black bg-opacity-70 text-white px-1.5 py-0.5 rounded-full z-10"><i class="fa-solid fa-eye-slash"></i></span>` : ''}
+      ${f.file_type==='video' ? `<span class="absolute top-1 right-1 text-[9px] bg-black bg-opacity-70 text-white px-1 py-0.5 rounded z-10"><i class="fa-solid fa-video"></i></span>` : ''}
     </label>`;
   }).join('') || `<div class="col-span-4 text-center text-xs text-gray-300 py-6">ไม่พบไฟล์ตามตัวกรอง</div>`;
 }
