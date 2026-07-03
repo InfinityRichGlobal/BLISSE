@@ -21,8 +21,8 @@
   .pill{ transition:all .2s ease; }
   .pill.active{ background:var(--text); color:#fff; }
   .gallery{ display:flex; flex-wrap:wrap; }
-  .gitem{ flex-grow:1; margin:2px; position:relative; overflow:hidden; border-radius:.75rem; cursor:pointer; background:#fafafa; }
-  .gitem img,.gitem video{ height:100%; width:100%; object-fit:cover; display:block; }
+  .gitem{ margin:2px; position:relative; overflow:hidden; border-radius:.75rem; cursor:pointer; background:#fafafa; }
+  .gitem img,.gitem video{ height:100%; width:auto; display:block; }
   .gitem .overlay{ position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,.55), transparent 40%); opacity:0; transition:opacity .2s; pointer-events:none; }
   .gitem:hover .overlay{ opacity:1; }
   .gitem .meta{ position:absolute; bottom:6px; left:8px; right:8px; color:#fff; font-size:11px; opacity:0; transition:opacity .2s; display:flex; justify-content:space-between; align-items:center; gap:8px; }
@@ -122,6 +122,31 @@
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbwElaS5cdJ5L3yLLfksKvPDo3NHtkjqa2DFGHzbMdkUMRUTZLR4R6gjD5pn2nVF4wiF/exec";
+
+// placeholder ตอนโหลดรูปไม่ขึ้น — สร้างในเครื่องเลย ไม่พึ่ง service ภายนอกที่อาจล่ม/บล็อก
+const FALLBACK_THUMB = "data:image/svg+xml;utf8," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><rect width="100%" height="100%" fill="#f0f0f0"/><text x="50%" y="50%" font-family="sans-serif" font-size="13" fill="#bbb" text-anchor="middle" dy=".3em">โหลดไม่ขึ้น</text></svg>'
+);
+const FALLBACK_VIDEO_PROCESSING = "data:image/svg+xml;utf8," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><rect width="100%" height="100%" fill="#1a1a1a"/><circle cx="110" cy="95" r="26" fill="#fff" opacity="0.9"/><polygon points="102,82 102,108 126,95" fill="#1a1a1a"/><text x="50%" y="150" font-family="sans-serif" font-size="12" fill="#ccc" text-anchor="middle">Drive กำลังสร้างพรีวิว...</text></svg>'
+);
+
+// Drive ใช้เวลาสร้าง thumbnail วีดีโอหลังอัปโหลด/ซิงค์ ไม่ใช่ทันที
+// ลองใหม่อัตโนมัติสัก 2 ครั้งก่อนค่อย fallback เป็นไอคอน
+function handleThumbError(imgEl, isVideo){
+  const retryCount = parseInt(imgEl.dataset.retry || '0');
+  if(isVideo && retryCount < 2){
+    imgEl.dataset.retry = retryCount + 1;
+    imgEl.src = FALLBACK_VIDEO_PROCESSING;
+    setTimeout(()=>{
+      const original = imgEl.dataset.original;
+      if(original) imgEl.src = original + '&_r=' + Date.now(); // cache-bust ลองโหลดใหม่
+    }, 2500 * (retryCount + 1));
+  } else {
+    imgEl.onerror = null;
+    imgEl.src = isVideo ? FALLBACK_VIDEO_PROCESSING : FALLBACK_THUMB;
+  }
+}
 
 let STATE = {
   uid: null, profile: null, role: null, approved: false,
@@ -285,8 +310,8 @@ function renderThumbGrid(containerId, listKey, list){
       </button>` : '';
 
     return `
-    <div class="gitem" style="height:${h}px; width:${Math.round(h*1.4)}px" onclick="openLightboxFromList('${listKey}', ${i})">
-      <img src="${thumb}" loading="lazy" onerror="this.src='https://via.placeholder.com/300x${h}?text=...'">
+    <div class="gitem" style="height:${h}px" onclick="openLightboxFromList('${listKey}', ${i})">
+      <img src="${thumb}" data-original="${thumb}" loading="lazy" onerror="handleThumbError(this, ${f.file_type==='video'})">
       ${adminShortcuts}
       ${hiddenBadge}
       <div class="overlay"></div>
@@ -302,14 +327,16 @@ function renderThumbGrid(containerId, listKey, list){
 }
 
 async function quickToggleShow(fileId, newState){
-  await api('bulkUpdate', { fileIds: [fileId], showHide: newState });
+  const res = await api('bulkUpdate', { fileIds: [fileId], showHide: newState });
+  if(res.error){ toast('ล้มเหลว: ' + res.error, 'err'); return; }
   toast(newState==='show' ? 'เปิดตาแล้ว' : 'ปิดตาแล้ว');
   await refreshData();
 }
 async function quickDelete(fileId){
   const ok = await showConfirm('ลบไฟล์นี้ออกจากระบบ? (ไฟล์จริงใน Drive จะไม่ถูกลบ)');
   if(!ok) return;
-  await api('deleteFiles', { fileIds: [fileId] });
+  const res = await api('deleteFiles', { fileIds: [fileId] });
+  if(res.error){ toast('ลบไม่สำเร็จ: ' + res.error, 'err'); return; }
   toast('ลบไฟล์แล้ว');
   await refreshData();
 }
@@ -410,6 +437,7 @@ function openPanel(type){
   const body = document.getElementById('panel-body');
   if(type==='upload'){
     uploadQueue = [];
+    uploadedFilesForGrid = [];
     title.textContent = 'อัปโหลดไฟล์';
     body.innerHTML = `
       <input type="file" id="upload-input" multiple accept="image/*,video/*" class="mb-3 block w-full text-sm" onchange="addFilesToQueue(this.files)">
@@ -417,7 +445,12 @@ function openPanel(type){
       <button onclick="startUpload()" class="w-full bg-black text-white rounded-xl py-2 text-sm mb-4">เริ่ม/ทำต่ออัปโหลด (<span id="queue-count">0</span> ไฟล์รอคิว)</button>
       <div id="upload-progress" class="border rounded-xl overflow-hidden divide-y"></div>
       <div id="upload-summary" class="text-xs text-gray-500 mt-2"></div>
-      <p class="text-[11px] text-gray-400 mt-3">เลือกไฟล์เพิ่มได้เรื่อยๆ ระหว่างที่กำลังอัปโหลดชุดก่อนหน้า</p>`;
+      <p class="text-[11px] text-gray-400 mt-3 mb-2">เลือกไฟล์เพิ่มได้เรื่อยๆ ระหว่างที่กำลังอัปโหลดชุดก่อนหน้า</p>
+      <div id="upload-thumbs-wrap" class="hidden">
+        <hr class="my-3">
+        <p class="text-xs font-medium mb-2">ไฟล์ที่อัปโหลดสำเร็จ — จัดการได้ทันทีตรงนี้เลย</p>
+        <div id="upload-thumbs" class="gallery"></div>
+      </div>`;
   }
   if(type==='sync'){
     title.textContent = 'ซิงค์จาก Drive';
@@ -449,6 +482,7 @@ async function refreshData(){
 
 // ---- upload queue with real progress (XHR) ----
 let uploadQueue = []; // { id, file, status, progress, error, localUrl }
+let uploadedFilesForGrid = []; // ไฟล์ที่อัปโหลดสำเร็จแล้ว แสดงเป็น thumbnail จัดการได้ทันที
 let uploadRunning = false;
 
 function addFilesToQueue(fileList){
@@ -512,7 +546,16 @@ async function startUpload(){
       if(phase) item.status = phase;
       renderUploadQueue();
     });
-    if(res.ok){ item.status='success'; success++; }
+    if(res.ok){
+      item.status='success'; success++;
+      uploadedFilesForGrid.push({
+        file_id: res.fileId, file_name: item.file.name,
+        file_type: item.file.type.startsWith('video') ? 'video' : 'image',
+        file_url: res.fileUrl, tags: tags, show_hide: 'show'
+      });
+      document.getElementById('upload-thumbs-wrap').classList.remove('hidden');
+      renderThumbGrid('upload-thumbs', 'upload', uploadedFilesForGrid);
+    }
     else{ item.status='fail'; item.error = res.error || 'ไม่ทราบสาเหตุ'; fail++; }
     renderUploadQueue();
     document.getElementById('upload-summary').textContent = `สำเร็จ ${success} | ล้มเหลว ${fail}`;
@@ -726,7 +769,7 @@ function renderManageGrid(){
     return `
     <label class="relative block aspect-square rounded-lg overflow-hidden border cursor-pointer group">
       <input type="checkbox" class="file-check absolute top-1 left-1 z-10 w-4 h-4" value="${f.file_id}">
-      <img src="${thumb}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/100?text=%F0%9F%93%84'">
+      <img src="${thumb}" data-original="${thumb}" class="w-full h-full object-cover" onerror="handleThumbError(this, ${f.file_type==='video'})">
       ${f.show_hide==='hide' ? `<span class="absolute bottom-1 right-1 text-[9px] bg-black bg-opacity-70 text-white px-1.5 py-0.5 rounded-full"><i class="fa-solid fa-eye-slash"></i></span>` : ''}
       ${f.file_type==='video' ? `<span class="absolute top-1 right-1 text-[9px] bg-black bg-opacity-70 text-white px-1 py-0.5 rounded"><i class="fa-solid fa-video"></i></span>` : ''}
     </label>`;
@@ -748,7 +791,8 @@ async function createNewTagInline(){
   const input = document.getElementById('new-tag-input');
   const name = input.value.trim();
   if(!name) return;
-  await api('createTag', { tagName: name, visibility: '' });
+  const res = await api('createTag', { tagName: name, visibility: '' });
+  if(res.error){ toast('สร้าง tag ไม่สำเร็จ: ' + res.error, 'err'); return; }
   STATE.tags.push({ tag_name: name, visibility: '' });
   MANAGE.pendingTagAdd.add(name);
   input.value = '';
@@ -759,7 +803,8 @@ async function applyTagsToSelected(){
   const ids = getSelectedIds();
   if(ids.length===0){ toast('ยังไม่ได้เลือกไฟล์', 'err'); return; }
   if(MANAGE.pendingTagAdd.size===0){ toast('ยังไม่ได้เลือก tag', 'err'); return; }
-  await api('bulkUpdate', { fileIds: ids, tagsToAdd: Array.from(MANAGE.pendingTagAdd) });
+  const res = await api('bulkUpdate', { fileIds: ids, tagsToAdd: Array.from(MANAGE.pendingTagAdd) });
+  if(res.error){ toast('ติด tag ไม่สำเร็จ: ' + res.error, 'err'); return; }
   toast(`ติด tag ให้ ${ids.length} ไฟล์แล้ว`);
   MANAGE.pendingTagAdd.clear();
   await refreshData();
@@ -773,7 +818,8 @@ function getSelectedIds(){
 }
 async function bulkSetShow(val){
   const ids = getSelectedIds(); if(ids.length===0){ toast('ยังไม่ได้เลือกไฟล์','err'); return; }
-  await api('bulkUpdate', { fileIds: ids, showHide: val });
+  const res = await api('bulkUpdate', { fileIds: ids, showHide: val });
+  if(res.error){ toast('เปลี่ยนสถานะไม่สำเร็จ: ' + res.error, 'err'); return; }
   toast(`${val==='show'?'เปิดตา':'ปิดตา'} ${ids.length} ไฟล์แล้ว`);
   await refreshData();
 }
@@ -781,12 +827,14 @@ async function bulkDelete(){
   const ids = getSelectedIds(); if(ids.length===0){ toast('ยังไม่ได้เลือกไฟล์','err'); return; }
   const ok = await showConfirm(`ลบข้อมูล ${ids.length} ไฟล์ออกจากระบบ? (ไฟล์จริงใน Drive จะไม่ถูกลบ)`);
   if(!ok) return;
-  await api('deleteFiles', { fileIds: ids });
+  const res = await api('deleteFiles', { fileIds: ids });
+  if(res.error){ toast('ลบไม่สำเร็จ: ' + res.error, 'err'); return; }
   toast(`ลบ ${ids.length} ไฟล์ออกจากระบบแล้ว`);
   await refreshData();
 }
 async function approveUser(uid, name, pic, role){
-  await api('approveUser', { targetUid: uid, displayName: name, pictureUrl: pic, role });
+  const res = await api('approveUser', { targetUid: uid, displayName: name, pictureUrl: pic, role });
+  if(res.error){ toast('อนุมัติไม่สำเร็จ: ' + res.error, 'err'); return; }
   toast(`อนุมัติ ${name} เป็น ${role} แล้ว`);
   await refreshData();
   if(!document.getElementById('admin-panel').classList.contains('hidden')) openPanel('manage');
