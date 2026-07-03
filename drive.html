@@ -21,7 +21,7 @@
   .pill{ transition:all .2s ease; }
   .pill.active{ background:var(--text); color:#fff; }
   .gallery{ display:flex; flex-wrap:wrap; }
-  .gitem{ margin:2px; position:relative; overflow:hidden; border-radius:.75rem; cursor:pointer; background:#fafafa; }
+  .gitem{ margin:2px; position:relative; overflow:hidden; border-radius:.75rem; cursor:pointer; background:#fafafa; border:1px solid rgba(0,0,0,.07); }
   .gitem img,.gitem video{ height:100%; width:auto; display:block; }
   .gitem .overlay{ position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,.55), transparent 40%); opacity:0; transition:opacity .2s; pointer-events:none; }
   .gitem:hover .overlay{ opacity:1; }
@@ -83,14 +83,16 @@
 
 <!-- LIGHTBOX -->
 <div id="lightbox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black bg-opacity-85">
-  <button onclick="closeLightbox()" class="absolute top-5 right-5 md:top-8 md:right-8 text-white text-3xl w-12 h-12 flex items-center justify-center z-10">&times;</button>
-  <button onclick="navLightbox(-1)" class="absolute left-2 md:left-8 text-white text-3xl w-12 h-12 flex items-center justify-center z-10"><i class="fa-solid fa-chevron-left"></i></button>
-  <button onclick="navLightbox(1)" class="absolute right-2 md:right-8 text-white text-3xl w-12 h-12 flex items-center justify-center z-10"><i class="fa-solid fa-chevron-right"></i></button>
-  <div id="lightbox-content" class="max-w-[90%] max-h-[85%] flex flex-col items-center"></div>
-  <div class="absolute bottom-6 flex gap-3 text-white text-sm">
-    <a id="lb-download" href="#" class="px-4 py-2 bg-white bg-opacity-10 rounded-full hover:bg-opacity-20"><i class="fa-solid fa-download mr-1"></i>ดาวน์โหลด</a>
-    <a id="lb-drive" href="#" target="_blank" class="px-4 py-2 bg-white bg-opacity-10 rounded-full hover:bg-opacity-20"><i class="fa-brands fa-google-drive mr-1"></i>เปิดใน Drive</a>
-    <div id="lb-admin-bar" class="hidden gap-3"></div>
+  <button onclick="closeLightbox()" class="absolute top-5 right-5 md:top-8 md:right-8 text-white text-3xl w-12 h-12 flex items-center justify-center z-10"><i class="fa-solid fa-xmark"></i></button>
+  <button onclick="navLightbox(-1)" class="absolute left-2 md:left-8 text-white text-2xl w-12 h-12 flex items-center justify-center z-10"><i class="fa-solid fa-chevron-left"></i></button>
+  <button onclick="navLightbox(1)" class="absolute right-2 md:right-8 text-white text-2xl w-12 h-12 flex items-center justify-center z-10"><i class="fa-solid fa-chevron-right"></i></button>
+  <div id="lightbox-content" class="max-w-[90%] max-h-[78%] flex flex-col items-center"></div>
+  <div class="absolute bottom-8 md:bottom-12 left-1/2 -translate-x-1/2 w-[94%] md:w-auto max-w-[95vw]">
+    <div id="lb-actionbar" class="flex flex-wrap justify-center items-center gap-1 bg-black bg-opacity-45 backdrop-blur-md rounded-2xl px-2 py-2 border border-white border-opacity-10">
+      <a id="lb-download" href="#" class="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs md:text-sm rounded-xl hover:bg-white hover:bg-opacity-10 transition-colors"><i class="fa-solid fa-download"></i><span class="hidden sm:inline">ดาวน์โหลด</span></a>
+      <a id="lb-drive" href="#" target="_blank" class="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs md:text-sm rounded-xl hover:bg-white hover:bg-opacity-10 transition-colors"><i class="fa-brands fa-google-drive"></i><span class="hidden sm:inline">Drive</span></a>
+      <div id="lb-admin-bar" class="hidden flex-wrap justify-center gap-1"></div>
+    </div>
   </div>
 </div>
 
@@ -103,6 +105,22 @@
       <button onclick="closePanel()" class="text-2xl w-8 h-8 flex items-center justify-center text-gray-400 hover:text-black">&times;</button>
     </div>
     <div id="panel-body" class="p-5"></div>
+  </div>
+</div>
+
+<!-- TAG EDITOR MODAL (เปิดจาก lightbox เพื่อจัดการ tag ไฟล์เดียวแบบเร็ว) -->
+<div id="tag-editor-modal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black bg-opacity-50 px-6">
+  <div class="bg-white rounded-2xl p-5 max-w-xs w-full shadow-2xl">
+    <p class="text-sm font-medium mb-3"><i class="fa-solid fa-tags mr-1.5"></i>จัดการ Tag</p>
+    <div id="tag-editor-list" class="flex flex-wrap gap-1.5 mb-3 max-h-48 overflow-y-auto"></div>
+    <div class="flex gap-2 mb-3">
+      <input id="tag-editor-new" placeholder="สร้าง tag ใหม่..." class="flex-1 border rounded-lg px-2 py-1.5 text-xs">
+      <button onclick="createTagFromEditor()" class="text-xs border px-3 py-1.5 rounded-lg whitespace-nowrap">+ สร้าง</button>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="closeTagEditor()" class="flex-1 border rounded-xl py-2 text-sm hover:bg-gray-50">ปิด</button>
+      <button onclick="saveTagEditor()" class="flex-1 bg-black text-white rounded-xl py-2 text-sm hover:bg-gray-800">บันทึก</button>
+    </div>
   </div>
 </div>
 
@@ -130,18 +148,23 @@ const FALLBACK_THUMB = "data:image/svg+xml;utf8," + encodeURIComponent(
 const FALLBACK_VIDEO_PROCESSING = "data:image/svg+xml;utf8," + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><rect width="100%" height="100%" fill="#1a1a1a"/><circle cx="110" cy="95" r="26" fill="#fff" opacity="0.9"/><polygon points="102,82 102,108 126,95" fill="#1a1a1a"/><text x="50%" y="150" font-family="sans-serif" font-size="12" fill="#ccc" text-anchor="middle">Drive กำลังสร้างพรีวิว...</text></svg>'
 );
+const FALLBACK_LOADING = "data:image/svg+xml;utf8," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><rect width="100%" height="100%" fill="#f5f5f5"/><text x="50%" y="50%" font-family="sans-serif" font-size="12" fill="#ccc" text-anchor="middle" dy=".3em">กำลังโหลด...</text></svg>'
+);
 
-// Drive ใช้เวลาสร้าง thumbnail วีดีโอหลังอัปโหลด/ซิงค์ ไม่ใช่ทันที
-// ลองใหม่อัตโนมัติสัก 2 ครั้งก่อนค่อย fallback เป็นไอคอน
+// Drive อาจใช้เวลาสักครู่กว่าจะสร้างลิงก์พรีวิวให้ไฟล์ที่เพิ่งอัปโหลด/ซิงค์มา
+// (เกิดได้ทั้งภาพและวีดีโอ) — ลอง retry อัตโนมัติก่อนค่อย fallback เป็นไอคอนถาวร
 function handleThumbError(imgEl, isVideo){
   const retryCount = parseInt(imgEl.dataset.retry || '0');
-  if(isVideo && retryCount < 2){
+  if(retryCount < 3){
     imgEl.dataset.retry = retryCount + 1;
-    imgEl.src = FALLBACK_VIDEO_PROCESSING;
+    imgEl.src = isVideo ? FALLBACK_VIDEO_PROCESSING : FALLBACK_LOADING;
     setTimeout(()=>{
       const original = imgEl.dataset.original;
-      if(original) imgEl.src = original + '&_r=' + Date.now(); // cache-bust ลองโหลดใหม่
-    }, 2500 * (retryCount + 1));
+      if(!original) return;
+      const sep = original.includes('?') ? '&' : '?';
+      imgEl.src = original + sep + '_r=' + Date.now(); // cache-bust ลองโหลดใหม่
+    }, 2000 * (retryCount + 1));
   } else {
     imgEl.onerror = null;
     imgEl.src = isVideo ? FALLBACK_VIDEO_PROCESSING : FALLBACK_THUMB;
@@ -392,9 +415,18 @@ function renderLightbox(){
   if(!f) return;
   const content = document.getElementById('lightbox-content');
   if(f.file_type==='image'){
-    content.innerHTML = `<img src="https://lh3.googleusercontent.com/d/${f.file_id}" class="max-w-full max-h-[75vh] rounded-2xl object-contain">`;
+    content.innerHTML = `<img src="https://lh3.googleusercontent.com/d/${f.file_id}" class="max-w-full max-h-[78vh] rounded-2xl object-contain">`;
   }else{
-    content.innerHTML = `<iframe src="https://drive.google.com/file/d/${f.file_id}/preview" class="w-[80vw] md:w-[600px] h-[45vw] md:h-[340px] rounded-2xl" allow="autoplay"></iframe>`;
+    // ใช้ <video> จริงก่อน (อัตราส่วนถูกต้อง + คอนโทรลเนทีฟ ไม่มี scrub bar ของ Drive มาบัง)
+    // ถ้าไฟล์ใหญ่/สตรีมตรงไม่ได้ ค่อย fallback เป็น iframe ของ Drive แทน
+    content.innerHTML = `
+      <video id="lb-video" controls playsinline class="max-w-[92vw] max-h-[78vh] rounded-2xl bg-black" style="display:block">
+        <source src="https://drive.google.com/uc?export=download&id=${f.file_id}" type="video/mp4">
+      </video>`;
+    const videoEl = document.getElementById('lb-video');
+    videoEl.onerror = () => {
+      content.innerHTML = `<iframe src="https://drive.google.com/file/d/${f.file_id}/preview" class="w-[90vw] max-w-[560px] aspect-video rounded-2xl" allow="autoplay"></iframe>`;
+    };
   }
   document.getElementById('lb-download').href = `https://drive.google.com/uc?export=download&id=${f.file_id}`;
   document.getElementById('lb-drive').href = f.file_url;
@@ -405,8 +437,9 @@ function renderLightbox(){
       const hidden = f.show_hide==='hide';
       adminBar.style.display = 'flex';
       adminBar.innerHTML = `
-        <button onclick="quickToggleShow('${f.file_id}','${hidden?'show':'hide'}')" class="px-4 py-2 bg-white bg-opacity-10 rounded-full hover:bg-opacity-20"><i class="fa-solid ${hidden?'fa-eye-slash':'fa-eye'} mr-1"></i>${hidden?'เปิดตา':'ปิดตา'}</button>
-        <button onclick="quickDelete('${f.file_id}')" class="px-4 py-2 bg-red-500 bg-opacity-80 rounded-full hover:bg-opacity-100"><i class="fa-solid fa-trash mr-1"></i>ลบ</button>`;
+        <button onclick="quickToggleShow('${f.file_id}','${hidden?'show':'hide'}')" class="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs md:text-sm rounded-xl hover:bg-white hover:bg-opacity-10 transition-colors"><i class="fa-solid ${hidden?'fa-eye-slash':'fa-eye'}"></i><span class="hidden sm:inline">${hidden?'เปิดตา':'ปิดตา'}</span></button>
+        <button onclick="openLightboxTagEditor('${f.file_id}')" class="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs md:text-sm rounded-xl hover:bg-white hover:bg-opacity-10 transition-colors"><i class="fa-solid fa-tags"></i><span class="hidden sm:inline">Tag</span></button>
+        <button onclick="quickDelete('${f.file_id}')" class="flex items-center gap-1.5 px-3.5 py-2 text-red-300 text-xs md:text-sm rounded-xl hover:bg-white hover:bg-opacity-10 transition-colors"><i class="fa-solid fa-trash"></i><span class="hidden sm:inline">ลบ</span></button>`;
     } else {
       adminBar.style.display = 'none';
     }
@@ -418,6 +451,62 @@ document.addEventListener('keydown', e=>{
   if(e.key==='ArrowRight') navLightbox(1);
   if(e.key==='Escape') closeLightbox();
 });
+
+// ---------------- TAG EDITOR (เปิดจาก lightbox จัดการ tag ไฟล์เดียวแบบเร็ว) ----------------
+let tagEditorFileId = null;
+let tagEditorSelected = new Set();
+
+function openLightboxTagEditor(fileId){
+  tagEditorFileId = fileId;
+  const list = LISTS[currentLightboxKey] || [];
+  const f = list.find(x=>x.file_id===fileId);
+  tagEditorSelected = new Set(fileTags(f || {tags:''}));
+  renderTagEditorList();
+  document.getElementById('tag-editor-modal').style.display = 'flex';
+}
+function closeTagEditor(){
+  document.getElementById('tag-editor-modal').style.display = 'none';
+}
+function renderTagEditorList(){
+  const box = document.getElementById('tag-editor-list');
+  box.innerHTML = STATE.tags.map(t=>{
+    const active = tagEditorSelected.has(t.tag_name);
+    return `<button onclick="toggleTagEditorChip('${t.tag_name}')" class="pill px-2.5 py-1 rounded-full text-[11px] border ${active?'active':'border-gray-200 text-gray-500'}">#${t.tag_name}</button>`;
+  }).join('') || `<span class="text-[11px] text-gray-300">ยังไม่มี tag ในระบบ สร้างใหม่ด้านล่าง</span>`;
+}
+function toggleTagEditorChip(name){
+  tagEditorSelected.has(name) ? tagEditorSelected.delete(name) : tagEditorSelected.add(name);
+  renderTagEditorList();
+}
+async function createTagFromEditor(){
+  const input = document.getElementById('tag-editor-new');
+  const name = input.value.trim();
+  if(!name) return;
+  const res = await api('createTag', { tagName: name, visibility: '' });
+  if(res.error){ toast('สร้าง tag ไม่สำเร็จ: ' + res.error, 'err'); return; }
+  STATE.tags.push({ tag_name: name, visibility: '' });
+  tagEditorSelected.add(name);
+  input.value = '';
+  renderTagEditorList();
+}
+async function saveTagEditor(){
+  const list = LISTS[currentLightboxKey] || [];
+  const f = list.find(x=>x.file_id===tagEditorFileId);
+  const original = new Set(fileTags(f || {tags:''}));
+  const toAdd = Array.from(tagEditorSelected).filter(t=>!original.has(t));
+  const toRemove = Array.from(original).filter(t=>!tagEditorSelected.has(t));
+  if(toAdd.length===0 && toRemove.length===0){ closeTagEditor(); return; }
+  const res = await api('bulkUpdate', { fileIds: [tagEditorFileId], tagsToAdd: toAdd, tagsToRemove: toRemove });
+  if(res.error){ toast('บันทึก tag ไม่สำเร็จ: ' + res.error, 'err'); return; }
+  toast('บันทึก tag แล้ว');
+  closeTagEditor();
+  await refreshData();
+  if(!document.getElementById('lightbox').classList.contains('hidden')){
+    const newList = LISTS[currentLightboxKey] || [];
+    const idx = newList.findIndex(x=>x.file_id===tagEditorFileId);
+    if(idx>=0){ STATE.lightboxIndex = idx; renderLightbox(); }
+  }
+}
 
 // ---------------- TOAST ----------------
 function toast(msg, type='ok'){
@@ -463,7 +552,7 @@ function openPanel(type){
   }
   if(type==='manage'){
     title.textContent = 'จัดการไฟล์ / ผู้ใช้';
-    MANAGE.type = 'all'; MANAGE.tags = new Set(); MANAGE.pendingTagAdd = new Set();
+    MANAGE.type = 'all'; MANAGE.tags = new Set(); MANAGE.pendingTagAdd = new Set(); MANAGE.untaggedOnly = false;
     renderManagePanel(body);
   }
 }
@@ -678,7 +767,8 @@ const MANAGE = { type: 'all', tags: new Set(), pendingTagAdd: new Set() };
 function manageFilteredFiles(){
   let list = STATE.files;
   if(MANAGE.type !== 'all') list = list.filter(f=>f.file_type===MANAGE.type);
-  if(MANAGE.tags.size>0) list = list.filter(f=>fileTags(f).some(t=>MANAGE.tags.has(t)));
+  if(MANAGE.untaggedOnly) list = list.filter(f=>fileTags(f).length===0);
+  else if(MANAGE.tags.size>0) list = list.filter(f=>fileTags(f).some(t=>MANAGE.tags.has(t)));
   return list;
 }
 
@@ -706,13 +796,16 @@ async function renderManagePanel(body){
     <div id="manage-grid" class="grid grid-cols-4 gap-1.5 mb-3 max-h-64 overflow-y-auto border rounded-xl p-1.5"></div>
 
     <div class="border rounded-xl p-3 mb-3">
-      <div class="text-xs font-medium mb-2">ติด Tag ให้ไฟล์ที่เลือก</div>
+      <div class="text-xs font-medium mb-2">จัดการ Tag ให้ไฟล์ที่เลือก</div>
       <div id="manage-tag-picker" class="flex flex-wrap gap-1.5 mb-2"></div>
       <div class="flex gap-2 mb-2">
         <input id="new-tag-input" placeholder="สร้าง tag ใหม่..." class="flex-1 border rounded-lg px-2 py-1 text-xs">
         <button onclick="createNewTagInline()" class="text-xs border px-3 py-1 rounded-lg">+ สร้าง</button>
       </div>
-      <button onclick="applyTagsToSelected()" class="w-full text-xs bg-black text-white py-1.5 rounded-lg">ติด Tag ที่เลือกให้ไฟล์</button>
+      <div class="flex gap-2">
+        <button onclick="applyTagsToSelected('add')" class="flex-1 text-xs bg-black text-white py-1.5 rounded-lg"><i class="fa-solid fa-plus mr-1"></i>ติด Tag</button>
+        <button onclick="applyTagsToSelected('remove')" class="flex-1 text-xs border border-red-200 text-red-500 py-1.5 rounded-lg"><i class="fa-solid fa-minus mr-1"></i>ลบ Tag ออก</button>
+      </div>
     </div>
 
     <div class="flex gap-2 mb-3">
@@ -747,13 +840,21 @@ function renderManageFilters(){
     return `<button onclick="setManageType('${t}')" class="pill px-3 py-1 rounded-full text-[11px] border ${MANAGE.type===t?'active':'border-gray-200 text-gray-500'}">${label}</button>`;
   }).join('');
   const tagBox = document.getElementById('manage-tag-filters');
-  tagBox.innerHTML = STATE.tags.map(t=>{
+  let tagHtml = `<button onclick="toggleManageUntagged()" class="pill px-2.5 py-1 rounded-full text-[10px] border ${MANAGE.untaggedOnly?'active':'border-gray-200 text-gray-500'}"><i class="fa-solid fa-tag mr-1"></i>ไม่มี tag</button>`;
+  tagHtml += STATE.tags.map(t=>{
     const active = MANAGE.tags.has(t.tag_name);
     return `<button onclick="toggleManageTag('${t.tag_name}')" class="pill px-2.5 py-1 rounded-full text-[10px] border ${active?'active':'border-gray-200 text-gray-500'}">#${t.tag_name}</button>`;
   }).join('');
+  tagBox.innerHTML = tagHtml;
 }
 function setManageType(t){ MANAGE.type = t; renderManageFilters(); renderManageGrid(); }
+function toggleManageUntagged(){
+  MANAGE.untaggedOnly = !MANAGE.untaggedOnly;
+  if(MANAGE.untaggedOnly) MANAGE.tags.clear();
+  renderManageFilters(); renderManageGrid();
+}
 function toggleManageTag(name){
+  MANAGE.untaggedOnly = false;
   MANAGE.tags.has(name) ? MANAGE.tags.delete(name) : MANAGE.tags.add(name);
   renderManageFilters(); renderManageGrid();
 }
@@ -799,13 +900,16 @@ async function createNewTagInline(){
   renderTagPicker(); renderManageFilters(); renderFilters();
   toast(`สร้าง tag #${name} แล้ว`);
 }
-async function applyTagsToSelected(){
+async function applyTagsToSelected(mode){
   const ids = getSelectedIds();
   if(ids.length===0){ toast('ยังไม่ได้เลือกไฟล์', 'err'); return; }
   if(MANAGE.pendingTagAdd.size===0){ toast('ยังไม่ได้เลือก tag', 'err'); return; }
-  const res = await api('bulkUpdate', { fileIds: ids, tagsToAdd: Array.from(MANAGE.pendingTagAdd) });
-  if(res.error){ toast('ติด tag ไม่สำเร็จ: ' + res.error, 'err'); return; }
-  toast(`ติด tag ให้ ${ids.length} ไฟล์แล้ว`);
+  const payload = { fileIds: ids };
+  if(mode==='remove') payload.tagsToRemove = Array.from(MANAGE.pendingTagAdd);
+  else payload.tagsToAdd = Array.from(MANAGE.pendingTagAdd);
+  const res = await api('bulkUpdate', payload);
+  if(res.error){ toast((mode==='remove'?'ลบ':'ติด') + ' tag ไม่สำเร็จ: ' + res.error, 'err'); return; }
+  toast(`${mode==='remove'?'ลบ':'ติด'} tag ${ids.length} ไฟล์แล้ว`);
   MANAGE.pendingTagAdd.clear();
   await refreshData();
 }
