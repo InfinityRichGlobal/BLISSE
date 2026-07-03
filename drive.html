@@ -39,22 +39,24 @@
 <div class="w-full max-w-[1700px] mx-auto">
 
   <!-- HEADER -->
-  <div class="mb-6 md:mb-10">
-    <div class="flex items-center gap-3 mb-3">
-      <div id="logo-box" class="w-9 h-9 md:w-11 md:h-11 rounded-2xl bg-gray-100 flex items-center justify-center overflow-hidden"></div>
-      <div>
-        <h1 id="header-title" class="text-lg md:text-2xl font-medium tracking-wide">Blissé Exclusive Storage</h1>
-        <p id="header-sub" class="text-[10px] md:text-xs text-gray-400 font-light tracking-wider uppercase">Loading...</p>
+  <div class="mb-3">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div id="logo-box" class="w-9 h-9 md:w-11 md:h-11 rounded-2xl bg-gray-100 flex items-center justify-center overflow-hidden"></div>
+        <div>
+          <h1 id="header-title" class="text-lg md:text-2xl font-medium tracking-wide">Blissé Exclusive Storage</h1>
+          <p id="header-sub" class="text-[10px] md:text-xs text-gray-400 font-light tracking-wider uppercase">Loading...</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1 md:gap-2">
+        <button onclick="pickRandom()" title="สุ่ม" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-shuffle"></i></button>
+        <button onclick="boot()" title="รีเฟรช" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-arrows-rotate"></i></button>
       </div>
     </div>
-    <div class="flex items-center justify-end gap-1 md:gap-1.5">
-      <div id="admin-buttons" class="hidden items-center gap-1 md:gap-1.5">
-        <button onclick="openPanel('upload')" title="อัปโหลด" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-upload"></i></button>
-        <button onclick="openPanel('sync')" title="ซิงค์" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-rotate"></i></button>
-        <button onclick="openPanel('manage')" title="จัดการ" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-sliders"></i></button>
-      </div>
-      <button onclick="pickRandom()" title="สุ่ม" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-shuffle"></i></button>
-      <button onclick="boot()" title="รีเฟรช" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-arrows-rotate"></i></button>
+    <div id="admin-buttons" class="hidden flex flex-wrap justify-end items-center gap-1 md:gap-1.5 mt-2">
+      <button onclick="openPanel('upload')" title="อัปโหลด" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-upload"></i></button>
+      <button onclick="openPanel('sync')" title="ซิงค์" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-rotate"></i></button>
+      <button onclick="openPanel('manage')" title="จัดการ" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-sliders"></i></button>
     </div>
   </div>
 
@@ -107,7 +109,7 @@
 <div id="toast-container" class="fixed bottom-5 right-5 z-[60] space-y-2"></div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbypdTB3lzWlBiM2ZYGgrSGHOxzfuiLyfQ-GVdlAR5O9aLx6_yM6XgtKWybz6Vy0DRo/exec";
+const API_URL = "PASTE_YOUR_GAS_WEB_APP_URL_HERE";
 
 let STATE = {
   uid: null, profile: null, role: null, approved: false,
@@ -150,7 +152,7 @@ async function boot(){
     document.getElementById('pending-state').classList.remove('hidden');
     return;
   }
-  if(STATE.role === 'admin') document.getElementById('admin-buttons').classList.remove('hidden');
+  if(STATE.role === 'admin') document.getElementById('admin-buttons').style.display = 'flex';
 
   document.getElementById('filter-bar').classList.remove('hidden');
   renderFilters();
@@ -413,9 +415,9 @@ async function startUpload(){
   while((item = uploadQueue.find(q=>q.status==='pending'))){
     item.status = 'uploading'; item.progress = 0;
     renderUploadQueue();
-    const res = await uploadFileXHR(item.file, tags, (pct)=>{
+    const res = await uploadFileFetch(item.file, tags, (pct, phase)=>{
       item.progress = pct;
-      if(pct >= 100) item.status = 'saving';
+      if(phase) item.status = phase;
       renderUploadQueue();
     });
     if(res.ok){ item.status='success'; success++; }
@@ -430,30 +432,47 @@ async function startUpload(){
   }
 }
 
-function uploadFileXHR(file, tags, onProgress){
-  return new Promise(async (resolve) => {
-    let base64;
-    try{ base64 = await fileToBase64(file); }
-    catch(e){ resolve({ error: 'อ่านไฟล์ไม่สำเร็จ' }); return; }
+// หมายเหตุสำคัญ: ห้ามใช้ xhr.upload.onprogress กับ Apps Script Web App
+// เพราะจะทำให้เบราว์เซอร์ส่ง CORS preflight (OPTIONS) ซึ่ง Apps Script ไม่รองรับ -> ถูกบล็อกทันที
+// ใช้ fetch() แบบ simple request แทน + progress ช่วงอ่านไฟล์จริง + progress จำลองช่วงส่งเครือข่าย
+async function uploadFileFetch(file, tags, onProgress){
+  let base64;
+  try{
+    base64 = await fileToBase64(file, (pct)=> onProgress(pct, 'uploading')); // 0-45% = อ่านไฟล์จริง
+  }catch(e){
+    return { error: 'อ่านไฟล์ไม่สำเร็จ' };
+  }
 
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', API_URL, true);
-    xhr.upload.onprogress = (e) => {
-      if(e.lengthComputable) onProgress(Math.round((e.loaded/e.total)*100));
-    };
-    xhr.onload = () => {
-      try{ resolve(JSON.parse(xhr.responseText)); }
-      catch(e){ resolve({ error: 'เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง' }); }
-    };
-    xhr.onerror = () => resolve({ error: 'เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ (เช็ค API_URL)' });
-    xhr.send(JSON.stringify({ action:'upload', uid: STATE.uid, fileName:file.name, mimeType:file.type, base64, tags }));
-  });
+  onProgress(50, 'uploading');
+  let fake = 50;
+  const ticker = setInterval(()=>{
+    fake = Math.min(fake + 4, 92);
+    onProgress(fake, 'uploading');
+  }, 350);
+
+  try{
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action:'upload', uid: STATE.uid, fileName:file.name, mimeType:file.type, base64, tags })
+    });
+    clearInterval(ticker);
+    onProgress(97, 'saving');
+    const json = await response.json();
+    onProgress(100);
+    return json;
+  }catch(err){
+    clearInterval(ticker);
+    return { error: 'เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ (เช็ค API_URL หรือ deploy ใหม่): ' + err.message };
+  }
 }
 
-function fileToBase64(file){
+function fileToBase64(file, onProgress){
   return new Promise((resolve, reject)=>{
     const reader = new FileReader();
-    reader.onload = ()=> resolve(reader.result.split(',')[1]);
+    reader.onprogress = (e)=>{
+      if(e.lengthComputable && onProgress) onProgress(Math.round((e.loaded/e.total)*45));
+    };
+    reader.onload = ()=>{ if(onProgress) onProgress(45); resolve(reader.result.split(',')[1]); };
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
