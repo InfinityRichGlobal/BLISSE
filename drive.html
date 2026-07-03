@@ -335,7 +335,9 @@ function openPanel(type){
     body.innerHTML = `
       <textarea id="sync-input" rows="4" placeholder="วาง Folder ID หรือ Full Link ทีละบรรทัด" class="mb-3 w-full border rounded-xl px-3 py-2 text-sm"></textarea>
       <button onclick="startSync()" class="w-full bg-black text-white rounded-xl py-2 text-sm mb-4">เริ่มซิงค์</button>
-      <div id="sync-progress" class="text-sm"></div>`;
+      <div id="sync-folder-report" class="text-[11px] text-gray-400 mb-3 space-y-0.5"></div>
+      <div id="sync-progress" class="text-sm mb-3"></div>
+      <div id="sync-thumbs" class="grid grid-cols-4 gap-1.5"></div>`;
   }
   if(type==='manage'){
     title.textContent = 'จัดการไฟล์ / ผู้ใช้';
@@ -498,24 +500,47 @@ async function startSync(){
   const ids = raw.split('\n').map(s=>s.trim()).filter(Boolean);
   if(ids.length===0) return;
   const box = document.getElementById('sync-progress');
-  box.innerHTML = `<div class="loader mb-2"></div><div id="sync-status">กำลังสแกนโฟลเดอร์...</div>`;
+  const reportBox = document.getElementById('sync-folder-report');
+  const thumbBox = document.getElementById('sync-thumbs');
+  box.innerHTML = `<div class="loader mb-2"></div><div id="sync-status">กำลังสแกนโฟลเดอร์ (รวมซับโฟลเดอร์)...</div>`;
+  reportBox.innerHTML = ''; thumbBox.innerHTML = '';
 
-  let done = false, totalAdded=0, totalSkipped=0, folderErrors=[];
+  let done = false, totalAdded=0, totalDup=0, totalType=0, folderErrors=[], reportShown=false;
   while(!done){
     const res = await api('sync', { folderIds: ids });
     if(res.error){ box.innerHTML = `<span class="text-red-500">${res.error}</span>`; return; }
     done = res.done;
-    totalAdded += res.addedThisBatch; totalSkipped += res.skippedThisBatch;
+    totalAdded += res.addedThisBatch;
+    totalDup += res.skippedDuplicateThisBatch || 0;
+    totalType += res.skippedTypeThisBatch || 0;
     if(res.folderErrors && res.folderErrors.length) folderErrors = res.folderErrors;
+
+    if(!reportShown && res.folderReport && res.folderReport.length){
+      reportBox.innerHTML = res.folderReport.map(r=>`<div>📁 ${r}</div>`).join('');
+      reportShown = true;
+    }
+
+    // โชว์ thumbnail สดของไฟล์ที่เพิ่งเพิ่มสำเร็จ
+    (res.addedFiles || []).forEach(f=>{
+      const thumb = f.type==='image'
+        ? `https://lh3.googleusercontent.com/d/${f.id}`
+        : `https://drive.google.com/thumbnail?id=${f.id}&sz=w200`;
+      const el = document.createElement('div');
+      el.className = 'aspect-square rounded-lg overflow-hidden border';
+      el.innerHTML = `<img src="${thumb}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/100?text=%F0%9F%93%84'">`;
+      thumbBox.appendChild(el);
+    });
+
     document.getElementById('sync-status').textContent =
-      `กำลังประมวลผล ${res.progress}/${res.total} — เพิ่ม ${totalAdded} | ข้ามซ้ำ ${totalSkipped}`;
+      `กำลังประมวลผล ${res.progress}/${res.total} — เพิ่ม ${totalAdded} | ซ้ำ ${totalDup} | ไม่ใช่ภาพ/วีดีโอ ${totalType}`;
   }
+
   let errHtml = '';
   if(folderErrors.length){
-    errHtml = `<div class="mt-2 text-red-500 text-xs">⚠️ บางโฟลเดอร์เข้าไม่ได้:<br>${folderErrors.join('<br>')}</div>`;
+    errHtml = `<div class="mt-2 text-red-500 text-xs">⚠️ บางโฟลเดอร์เข้าไม่ได้ (เช็คสิทธิ์ Drive):<br>${folderErrors.join('<br>')}</div>`;
   }
-  box.innerHTML += `<div class="mt-2 text-green-600 text-sm">✅ เสร็จสิ้น: เพิ่ม ${totalAdded} ไฟล์ ข้ามซ้ำ ${totalSkipped} ไฟล์</div>${errHtml}`;
-  toast(`ซิงค์เสร็จ: เพิ่ม ${totalAdded}, ข้าม ${totalSkipped}`);
+  box.innerHTML += `<div class="mt-2 text-green-600 text-sm">✅ เสร็จสิ้น: เพิ่ม ${totalAdded} | ซ้ำ ${totalDup} | ไม่ใช่ภาพ/วีดีโอ ${totalType}</div>${errHtml}`;
+  toast(`ซิงค์เสร็จ: เพิ่ม ${totalAdded} ไฟล์`);
   await refreshData();
 }
 
