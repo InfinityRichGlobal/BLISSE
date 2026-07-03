@@ -500,18 +500,23 @@ async function startSync(){
   const box = document.getElementById('sync-progress');
   box.innerHTML = `<div class="loader mb-2"></div><div id="sync-status">กำลังสแกนโฟลเดอร์...</div>`;
 
-  let done = false, totalAdded=0, totalSkipped=0;
+  let done = false, totalAdded=0, totalSkipped=0, folderErrors=[];
   while(!done){
     const res = await api('sync', { folderIds: ids });
     if(res.error){ box.innerHTML = `<span class="text-red-500">${res.error}</span>`; return; }
     done = res.done;
     totalAdded += res.addedThisBatch; totalSkipped += res.skippedThisBatch;
+    if(res.folderErrors && res.folderErrors.length) folderErrors = res.folderErrors;
     document.getElementById('sync-status').textContent =
       `กำลังประมวลผล ${res.progress}/${res.total} — เพิ่ม ${totalAdded} | ข้ามซ้ำ ${totalSkipped}`;
   }
-  box.innerHTML += `<div class="mt-2 text-green-600 text-sm">✅ เสร็จสิ้น: เพิ่ม ${totalAdded} ไฟล์ ข้ามซ้ำ ${totalSkipped} ไฟล์</div>`;
+  let errHtml = '';
+  if(folderErrors.length){
+    errHtml = `<div class="mt-2 text-red-500 text-xs">⚠️ บางโฟลเดอร์เข้าไม่ได้:<br>${folderErrors.join('<br>')}</div>`;
+  }
+  box.innerHTML += `<div class="mt-2 text-green-600 text-sm">✅ เสร็จสิ้น: เพิ่ม ${totalAdded} ไฟล์ ข้ามซ้ำ ${totalSkipped} ไฟล์</div>${errHtml}`;
   toast(`ซิงค์เสร็จ: เพิ่ม ${totalAdded}, ข้าม ${totalSkipped}`);
-  boot();
+  await refreshData();
 }
 
 // ---- manage panel ----
