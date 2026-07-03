@@ -540,7 +540,10 @@ function openPanel(type){
       </div>
       <button onclick="startUpload()" class="w-full bg-black text-white rounded-xl py-2 text-sm mb-4">เริ่ม/ทำต่ออัปโหลด (<span id="queue-count">0</span> ไฟล์รอคิว)</button>
       <div id="upload-progress" class="border rounded-xl overflow-hidden divide-y"></div>
-      <div id="upload-summary" class="text-xs text-gray-500 mt-2"></div>
+      <div class="flex items-center justify-between mt-2">
+        <div id="upload-summary" class="text-xs text-gray-500"></div>
+        <button onclick="retryAllFailed()" class="text-[11px] border border-gray-300 px-2.5 py-1 rounded-full hover:bg-gray-100"><i class="fa-solid fa-rotate-right mr-1"></i>ลองใหม่ที่พลาดทั้งหมด</button>
+      </div>
       <p class="text-[11px] text-gray-400 mt-3 mb-2">เลือกไฟล์เพิ่มได้เรื่อยๆ ระหว่างที่กำลังอัปโหลดชุดก่อนหน้า</p>
       <div id="upload-thumbs-wrap" class="hidden">
         <hr class="my-3">
@@ -672,7 +675,7 @@ function renderUploadQueue(){
       uploading: `<span class="text-blue-500">กำลังอัปโหลด ${q.progress}%</span>`,
       saving: '<span class="text-blue-500">กำลังบันทึกลงชีต...</span>',
       success: '<span class="text-green-600"><i class="fa-solid fa-circle-check mr-1"></i>สำเร็จ</span>',
-      fail: `<span class="text-red-500"><i class="fa-solid fa-circle-xmark mr-1"></i>ล้มเหลว: ${q.error||'ไม่ทราบสาเหตุ'}</span>`
+      fail: `<span class="text-red-500"><i class="fa-solid fa-circle-xmark mr-1"></i>ล้มเหลว: ${q.error||'ไม่ทราบสาเหตุ'}</span> <button onclick="retryUploadItem('${q.id}')" class="ml-1 text-[10px] border border-gray-300 px-2 py-0.5 rounded-full hover:bg-gray-100 whitespace-nowrap"><i class="fa-solid fa-rotate-right mr-0.5"></i>ลองใหม่</button>`
     }[q.status];
     return `
     <div class="progress-row">
@@ -690,6 +693,24 @@ function renderUploadQueue(){
 }
 
 const MAX_CONCURRENT_UPLOADS = 3; // อัปโหลดพร้อมกันได้สูงสุดกี่ไฟล์ (กัน Apps Script quota ชน)
+
+function retryUploadItem(id){
+  const item = uploadQueue.find(q=>q.id===id);
+  if(!item || item.status!=='fail') return;
+  item.status = 'pending'; item.progress = 0; item.error = null;
+  renderUploadQueue();
+  startUpload(); // ทำต่อคิว (จะหยิบเฉพาะ pending อัตโนมัติ ไฟล์ที่สำเร็จแล้วไม่ถูกแตะ)
+}
+
+function retryAllFailed(){
+  let count = 0;
+  uploadQueue.forEach(q=>{
+    if(q.status==='fail'){ q.status='pending'; q.progress=0; q.error=null; count++; }
+  });
+  if(count===0){ toast('ไม่มีไฟล์ที่ล้มเหลว','err'); return; }
+  renderUploadQueue();
+  startUpload();
+}
 
 async function startUpload(){
   if(uploadRunning) return; // กันกดซ้ำซ้อน
@@ -715,7 +736,18 @@ async function startUpload(){
       document.getElementById('upload-thumbs-wrap').classList.remove('hidden');
       renderThumbGrid('upload-thumbs', 'upload', uploadedFilesForGrid);
     }
-    else{ item.status='fail'; item.error = res.error || 'ไม่ทราบสาเหตุ'; fail++; }
+    else{
+      // ถ้า fail เพราะ lock ชนกัน (อัปโหลดพร้อมกันหลายไฟล์) ให้รอแป๊บแล้ว retry อัตโนมัติ 1 ครั้งก่อน
+      const isLockError = (res.error||'').includes('ล็อก') || (res.error||'').toLowerCase().includes('lock');
+      if(isLockError && !item.autoRetried){
+        item.autoRetried = true;
+        item.status = 'pending'; item.progress = 0; item.error = null;
+        renderUploadQueue();
+        await new Promise(r=>setTimeout(r, 2000)); // เว้นจังหวะให้ lock ว่าง
+        return; // ปล่อยกลับเข้าคิว worker หยิบไปทำใหม่เอง
+      }
+      item.status='fail'; item.error = res.error || 'ไม่ทราบสาเหตุ'; fail++;
+    }
     renderUploadQueue();
     document.getElementById('upload-summary').textContent = `สำเร็จ ${success} | ล้มเหลว ${fail}`;
   }
@@ -956,8 +988,23 @@ function renderTagPicker(){
   const box = document.getElementById('manage-tag-picker');
   box.innerHTML = STATE.tags.map(t=>{
     const active = MANAGE.pendingTagAdd.has(t.tag_name);
-    return `<button onclick="togglePendingTag('${t.tag_name}')" class="pill px-2.5 py-1 rounded-full text-[10px] border ${active?'active':'border-gray-200 text-gray-500'}">#${t.tag_name}</button>`;
+    return `<span class="inline-flex items-center pill rounded-full text-[10px] border ${active?'active':'border-gray-200 text-gray-500'}">
+      <button onclick="togglePendingTag('${t.tag_name}')" class="pl-2.5 pr-1 py-1">#${t.tag_name}</button>
+      <button onclick="deleteTagPermanent('${t.tag_name}')" title="ลบ tag นี้ออกจากระบบ" class="pr-2 pl-0.5 py-1 ${active?'text-white':'text-gray-400'} hover:text-red-500"><i class="fa-solid fa-xmark text-[9px]"></i></button>
+    </span>`;
   }).join('') || `<span class="text-[11px] text-gray-300">ยังไม่มี tag ในระบบ สร้างใหม่ด้านล่าง</span>`;
+}
+
+async function deleteTagPermanent(name){
+  const ok = await showConfirm(`ลบ tag #${name} ออกจากระบบถาวร? (จะถูกล้างออกจากทุกไฟล์ที่ติดอยู่ด้วย)`);
+  if(!ok) return;
+  const res = await api('deleteTag', { tagName: name });
+  if(res.error){ toast('ลบ tag ไม่สำเร็จ: ' + res.error, 'err'); return; }
+  STATE.tags = STATE.tags.filter(t=>t.tag_name!==name);
+  MANAGE.pendingTagAdd.delete(name);
+  MANAGE.tags.delete(name);
+  toast(`ลบ tag #${name} แล้ว (ล้างจาก ${res.cleaned} ไฟล์)`);
+  await refreshData();
 }
 function togglePendingTag(name){
   MANAGE.pendingTagAdd.has(name) ? MANAGE.pendingTagAdd.delete(name) : MANAGE.pendingTagAdd.add(name);
