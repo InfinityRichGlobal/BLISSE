@@ -9,7 +9,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
-  
   :root{
     --bg:#ffffff; --text:#171717; --border:#f0f0f0; --thumb-h:160px;
   }
@@ -40,16 +39,16 @@
 <div class="w-full max-w-[1700px] mx-auto">
 
   <!-- HEADER -->
-  <div class="flex items-center justify-between mb-6 md:mb-10">
-    <div class="flex items-center gap-3">
+  <div class="mb-6 md:mb-10">
+    <div class="flex items-center gap-3 mb-3">
       <div id="logo-box" class="w-9 h-9 md:w-11 md:h-11 rounded-2xl bg-gray-100 flex items-center justify-center overflow-hidden"></div>
       <div>
         <h1 id="header-title" class="text-lg md:text-2xl font-medium tracking-wide">Blissé Exclusive Storage</h1>
         <p id="header-sub" class="text-[10px] md:text-xs text-gray-400 font-light tracking-wider uppercase">Loading...</p>
       </div>
     </div>
-    <div class="flex items-center gap-1 md:gap-2">
-      <div id="admin-buttons" class="hidden items-center gap-1 md:gap-2 mr-2">
+    <div class="flex items-center justify-end gap-1 md:gap-1.5">
+      <div id="admin-buttons" class="hidden items-center gap-1 md:gap-1.5">
         <button onclick="openPanel('upload')" title="อัปโหลด" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-upload"></i></button>
         <button onclick="openPanel('sync')" title="ซิงค์" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-rotate"></i></button>
         <button onclick="openPanel('manage')" title="จัดการ" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-sliders"></i></button>
@@ -108,7 +107,7 @@
 <div id="toast-container" class="fixed bottom-5 right-5 z-[60] space-y-2"></div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbwXUxqRusM52UUAsnDotfMwUHrZ0U7r4QgoykYLpjhXlobQp97NDGRjiF9ENZ5nZ40o/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbypdTB3lzWlBiM2ZYGgrSGHOxzfuiLyfQ-GVdlAR5O9aLx6_yM6XgtKWybz6Vy0DRo/exec";
 
 let STATE = {
   uid: null, profile: null, role: null, approved: false,
@@ -319,13 +318,15 @@ function openPanel(type){
   const title = document.getElementById('panel-title');
   const body = document.getElementById('panel-body');
   if(type==='upload'){
+    uploadQueue = [];
     title.textContent = 'อัปโหลดไฟล์';
     body.innerHTML = `
-      <input type="file" id="upload-input" multiple accept="image/*,video/*" class="mb-3 block w-full text-sm">
-      <input type="text" id="upload-tags" placeholder="tag (คั่นด้วย , )" class="mb-3 w-full border rounded-xl px-3 py-2 text-sm">
-      <button onclick="startUpload()" class="w-full bg-black text-white rounded-xl py-2 text-sm mb-4">เริ่มอัปโหลด</button>
-      <div id="upload-progress" class="border rounded-xl overflow-hidden"></div>
-      <div id="upload-summary" class="text-xs text-gray-500 mt-2"></div>`;
+      <input type="file" id="upload-input" multiple accept="image/*,video/*" class="mb-3 block w-full text-sm" onchange="addFilesToQueue(this.files)">
+      <input type="text" id="upload-tags" placeholder="tag (คั่นด้วย , ) — ใช้กับไฟล์ที่ยังไม่อัปโหลด" class="mb-3 w-full border rounded-xl px-3 py-2 text-sm">
+      <button onclick="startUpload()" class="w-full bg-black text-white rounded-xl py-2 text-sm mb-4">เริ่ม/ทำต่ออัปโหลด (<span id="queue-count">0</span> ไฟล์รอคิว)</button>
+      <div id="upload-progress" class="border rounded-xl overflow-hidden divide-y"></div>
+      <div id="upload-summary" class="text-xs text-gray-500 mt-2"></div>
+      <p class="text-[11px] text-gray-400 mt-3">เลือกไฟล์เพิ่มได้เรื่อยๆ ระหว่างที่กำลังอัปโหลดชุดก่อนหน้า</p>`;
   }
   if(type==='sync'){
     title.textContent = 'ซิงค์จาก Drive';
@@ -336,47 +337,117 @@ function openPanel(type){
   }
   if(type==='manage'){
     title.textContent = 'จัดการไฟล์ / ผู้ใช้';
+    MANAGE.type = 'all'; MANAGE.tags = new Set(); MANAGE.pendingTagAdd = new Set();
     renderManagePanel(body);
   }
 }
 
-// ---- upload with progress ----
+async function refreshData(){
+  // โหลดข้อมูลใหม่แบบเงียบๆ ไม่รีเซ็ต UI ทั้งหน้า ใช้หลังทำ action ในหน้าจัดการ
+  const data = await api('bootstrap', { uid: STATE.uid });
+  STATE.files = data.files; STATE.tags = data.tags; STATE.showCounts = data.showCounts;
+  renderFilters();
+  applyFilters();
+  if(!document.getElementById('admin-panel').classList.contains('hidden') &&
+     document.getElementById('panel-title').textContent.includes('จัดการ')){
+    renderManagePanel(document.getElementById('panel-body'));
+  }
+}
+
+// ---- upload queue with real progress (XHR) ----
+let uploadQueue = []; // { id, file, status, progress, error, localUrl }
+let uploadRunning = false;
+
+function addFilesToQueue(fileList){
+  Array.from(fileList).forEach(file=>{
+    uploadQueue.push({
+      id: 'u'+Math.random().toString(36).slice(2),
+      file, status: 'pending', progress: 0, error: null,
+      localUrl: URL.createObjectURL(file)
+    });
+  });
+  document.getElementById('upload-input').value = ''; // เคลียร์ input เผื่อเลือกไฟล์เดิมซ้ำได้อีก
+  renderUploadQueue();
+}
+
+function removeFromQueue(id){
+  uploadQueue = uploadQueue.filter(q => q.id !== id || q.status !== 'pending');
+  renderUploadQueue();
+}
+
+function renderUploadQueue(){
+  const box = document.getElementById('upload-progress');
+  document.getElementById('queue-count').textContent = uploadQueue.filter(q=>q.status==='pending').length;
+  box.innerHTML = uploadQueue.map(q=>{
+    const isVideo = q.file.type.startsWith('video');
+    const statusHtml = {
+      pending: '<span class="text-gray-400">รอคิว</span>',
+      uploading: `<span class="text-blue-500">กำลังอัปโหลด ${q.progress}%</span>`,
+      saving: '<span class="text-blue-500">กำลังบันทึกลงชีต...</span>',
+      success: '<span class="text-green-600">✅ สำเร็จ</span>',
+      fail: `<span class="text-red-500" title="${q.error||''}">❌ ล้มเหลว</span>`
+    }[q.status];
+    return `
+    <div class="progress-row">
+      ${isVideo ? `<video src="${q.localUrl}" class="w-10 h-10 rounded-lg object-cover"></video>` : `<img src="${q.localUrl}" class="w-10 h-10 rounded-lg object-cover">`}
+      <div class="flex-1 min-w-0">
+        <div class="truncate text-xs">${q.file.name}</div>
+        <div class="w-full h-1 bg-gray-100 rounded-full mt-1 overflow-hidden">
+          <div class="h-full bg-black transition-all" style="width:${q.status==='success'?100:q.progress}%"></div>
+        </div>
+      </div>
+      <div class="text-[11px] whitespace-nowrap">${statusHtml}</div>
+      ${q.status==='pending' ? `<button onclick="removeFromQueue('${q.id}')" class="text-gray-300 hover:text-red-500 text-xs">✕</button>` : ''}
+    </div>`;
+  }).join('');
+}
+
 async function startUpload(){
-  const input = document.getElementById('upload-input');
+  if(uploadRunning) return; // กันกดซ้ำซ้อน
+  uploadRunning = true;
   const tags = document.getElementById('upload-tags').value;
-  const files = Array.from(input.files);
-  if(files.length===0) return;
-  const progressBox = document.getElementById('upload-progress');
-  progressBox.innerHTML = '';
   let success=0, fail=0;
 
-  for(const [idx, file] of files.entries()){
-    const row = document.createElement('div');
-    row.className = 'progress-row';
-    const localUrl = URL.createObjectURL(file);
-    row.innerHTML = `
-      ${file.type.startsWith('video') ? `<video src="${localUrl}" class="w-10 h-10 rounded-lg object-cover"></video>` : `<img src="${localUrl}" class="w-10 h-10 rounded-lg object-cover">`}
-      <div class="flex-1 truncate text-xs">${file.name}</div>
-      <div id="status-${idx}" class="text-xs text-gray-400">รอคิว...</div>`;
-    progressBox.appendChild(row);
+  // ประมวลผลทีละไฟล์ที่ status ยังเป็น pending ณ ขณะนั้น (รองรับเพิ่มไฟล์ระหว่างทาง)
+  let item;
+  while((item = uploadQueue.find(q=>q.status==='pending'))){
+    item.status = 'uploading'; item.progress = 0;
+    renderUploadQueue();
+    const res = await uploadFileXHR(item.file, tags, (pct)=>{
+      item.progress = pct;
+      if(pct >= 100) item.status = 'saving';
+      renderUploadQueue();
+    });
+    if(res.ok){ item.status='success'; success++; }
+    else{ item.status='fail'; item.error = res.error || 'ไม่ทราบสาเหตุ'; fail++; }
+    renderUploadQueue();
+    document.getElementById('upload-summary').textContent = `สำเร็จ ${success} | ล้มเหลว ${fail}`;
   }
+  uploadRunning = false;
+  if(success>0 || fail>0){
+    toast(`อัปโหลดเสร็จรอบนี้: สำเร็จ ${success}, ล้มเหลว ${fail}`);
+    await refreshData();
+  }
+}
 
-  for(const [idx, file] of files.entries()){
-    const statusEl = document.getElementById(`status-${idx}`);
-    statusEl.textContent = 'กำลังอัปโหลด...';
-    try{
-      const base64 = await fileToBase64(file);
-      statusEl.textContent = 'กำลังบันทึกลงชีต...';
-      const res = await api('upload', { fileName: file.name, mimeType: file.type, base64, tags });
-      if(res.ok){ statusEl.innerHTML = '<span class="text-green-600">✅ สำเร็จ</span>'; success++; }
-      else{ statusEl.innerHTML = '<span class="text-red-500">❌ ล้มเหลว</span>'; fail++; }
-    }catch(err){
-      statusEl.innerHTML = '<span class="text-red-500">❌ ล้มเหลว</span>'; fail++;
-    }
-    document.getElementById('upload-summary').textContent = `สำเร็จ ${success} | ล้มเหลว ${fail} | ทั้งหมด ${files.length}`;
-  }
-  toast(`อัปโหลดเสร็จ: สำเร็จ ${success}, ล้มเหลว ${fail}`);
-  boot();
+function uploadFileXHR(file, tags, onProgress){
+  return new Promise(async (resolve) => {
+    let base64;
+    try{ base64 = await fileToBase64(file); }
+    catch(e){ resolve({ error: 'อ่านไฟล์ไม่สำเร็จ' }); return; }
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', API_URL, true);
+    xhr.upload.onprogress = (e) => {
+      if(e.lengthComputable) onProgress(Math.round((e.loaded/e.total)*100));
+    };
+    xhr.onload = () => {
+      try{ resolve(JSON.parse(xhr.responseText)); }
+      catch(e){ resolve({ error: 'เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง' }); }
+    };
+    xhr.onerror = () => resolve({ error: 'เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ (เช็ค API_URL)' });
+    xhr.send(JSON.stringify({ action:'upload', uid: STATE.uid, fileName:file.name, mimeType:file.type, base64, tags }));
+  });
 }
 
 function fileToBase64(file){
@@ -411,48 +482,139 @@ async function startSync(){
 }
 
 // ---- manage panel ----
+const MANAGE = { type: 'all', tags: new Set(), pendingTagAdd: new Set() };
+
+function manageFilteredFiles(){
+  let list = STATE.files;
+  if(MANAGE.type !== 'all') list = list.filter(f=>f.file_type===MANAGE.type);
+  if(MANAGE.tags.size>0) list = list.filter(f=>fileTags(f).some(t=>MANAGE.tags.has(t)));
+  return list;
+}
+
 async function renderManagePanel(body){
+  const filtered = manageFilteredFiles();
   body.innerHTML = `
     <div class="mb-4">
       <h4 class="text-sm font-medium mb-2">คำขอเข้าใช้งาน</h4>
       <div id="pending-list" class="text-xs text-gray-400">กำลังโหลด...</div>
     </div>
     <hr class="my-4">
-    <div>
-      <h4 class="text-sm font-medium mb-2">ไฟล์ทั้งหมด (${STATE.files.length})</h4>
-      <div class="flex gap-2 mb-2">
+
+    <h4 class="text-sm font-medium mb-2">กรองไฟล์เพื่อจัดการ</h4>
+    <div id="manage-type-filters" class="flex flex-wrap gap-1.5 mb-2"></div>
+    <div id="manage-tag-filters" class="flex flex-wrap gap-1.5 mb-3"></div>
+
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs text-gray-500">แสดง ${filtered.length} ไฟล์</span>
+      <div class="flex gap-2">
         <button onclick="selectAllFiles(true)" class="text-xs underline">เลือกทั้งหมด</button>
         <button onclick="selectAllFiles(false)" class="text-xs underline">ยกเลิกเลือก</button>
       </div>
-      <div class="flex gap-2 mb-3">
-        <input id="bulk-tag" placeholder="ตั้ง tag (คั่น ,)" class="flex-1 border rounded-lg px-2 py-1 text-xs">
-        <button onclick="bulkSetTag()" class="text-xs bg-black text-white px-3 py-1 rounded-lg">ตั้ง Tag</button>
-      </div>
-      <div class="flex gap-2 mb-3">
-        <button onclick="bulkSetShow('show')" class="flex-1 text-xs border rounded-lg py-1"><i class="fa-solid fa-eye mr-1"></i>เปิดตา</button>
-        <button onclick="bulkSetShow('hide')" class="flex-1 text-xs border rounded-lg py-1"><i class="fa-solid fa-eye-slash mr-1"></i>ปิดตา</button>
-      </div>
-      <div id="manage-list" class="max-h-80 overflow-y-auto border rounded-xl"></div>
-    </div>`;
+    </div>
 
-  document.getElementById('manage-list').innerHTML = STATE.files.map(f=>`
-    <label class="flex items-center gap-2 px-3 py-2 border-b text-xs">
-      <input type="checkbox" class="file-check" value="${f.file_id}">
-      <img src="https://lh3.googleusercontent.com/d/${f.file_id}" class="w-8 h-8 rounded object-cover" onerror="this.style.display='none'">
-      <span class="flex-1 truncate">${f.file_name}</span>
-      <span class="text-gray-400">${f.show_hide}</span>
-    </label>`).join('');
+    <div id="manage-grid" class="grid grid-cols-4 gap-1.5 mb-3 max-h-64 overflow-y-auto border rounded-xl p-1.5"></div>
+
+    <div class="border rounded-xl p-3 mb-3">
+      <div class="text-xs font-medium mb-2">ติด Tag ให้ไฟล์ที่เลือก</div>
+      <div id="manage-tag-picker" class="flex flex-wrap gap-1.5 mb-2"></div>
+      <div class="flex gap-2 mb-2">
+        <input id="new-tag-input" placeholder="สร้าง tag ใหม่..." class="flex-1 border rounded-lg px-2 py-1 text-xs">
+        <button onclick="createNewTagInline()" class="text-xs border px-3 py-1 rounded-lg">+ สร้าง</button>
+      </div>
+      <button onclick="applyTagsToSelected()" class="w-full text-xs bg-black text-white py-1.5 rounded-lg">ติด Tag ที่เลือกให้ไฟล์</button>
+    </div>
+
+    <div class="flex gap-2 mb-3">
+      <button onclick="bulkSetShow('show')" class="flex-1 text-xs border rounded-lg py-1.5"><i class="fa-solid fa-eye mr-1"></i>เปิดตา</button>
+      <button onclick="bulkSetShow('hide')" class="flex-1 text-xs border rounded-lg py-1.5"><i class="fa-solid fa-eye-slash mr-1"></i>ปิดตา</button>
+    </div>
+    <button onclick="bulkDelete()" class="w-full text-xs border border-red-200 text-red-500 rounded-lg py-1.5 mb-2"><i class="fa-solid fa-trash mr-1"></i>ลบไฟล์ที่เลือกออกจากระบบ</button>
+    <p class="text-[10px] text-gray-400">การลบจะลบเฉพาะข้อมูลในระบบ ไม่ลบไฟล์จริงใน Google Drive</p>`;
+
+  renderManageFilters();
+  renderManageGrid();
+  renderTagPicker();
 
   const pending = await api('pendingUsers', { uid: STATE.uid });
   const list = document.getElementById('pending-list');
-  if(!pending.pending || pending.pending.length===0){ list.textContent = 'ไม่มีคำขอค้าง'; return; }
-  list.innerHTML = pending.pending.map(p=>`
-    <div class="flex items-center gap-2 mb-2">
-      <img src="${p.picture_url}" class="w-8 h-8 rounded-full">
-      <span class="flex-1 text-xs">${p.display_name}</span>
-      <button onclick="approveUser('${p.line_user_id}','${p.display_name}','${p.picture_url}','user')" class="text-[10px] bg-black text-white px-2 py-1 rounded-full">สมาชิก</button>
-      <button onclick="approveUser('${p.line_user_id}','${p.display_name}','${p.picture_url}','admin')" class="text-[10px] border px-2 py-1 rounded-full">แอดมิน</button>
-    </div>`).join('');
+  if(!pending.pending || pending.pending.length===0){ list.textContent = 'ไม่มีคำขอค้าง'; }
+  else{
+    list.innerHTML = pending.pending.map(p=>`
+      <div class="flex items-center gap-2 mb-2">
+        <img src="${p.picture_url}" class="w-8 h-8 rounded-full">
+        <span class="flex-1 text-xs">${p.display_name}</span>
+        <button onclick="approveUser('${p.line_user_id}','${p.display_name}','${p.picture_url}','user')" class="text-[10px] bg-black text-white px-2 py-1 rounded-full">สมาชิก</button>
+        <button onclick="approveUser('${p.line_user_id}','${p.display_name}','${p.picture_url}','admin')" class="text-[10px] border px-2 py-1 rounded-full">แอดมิน</button>
+      </div>`).join('');
+  }
+}
+
+function renderManageFilters(){
+  const typeBox = document.getElementById('manage-type-filters');
+  typeBox.innerHTML = ['all','image','video'].map(t=>{
+    const label = t==='all'?'ทั้งหมด':(t==='image'?'📷 ภาพ':'🎬 วีดีโอ');
+    return `<button onclick="setManageType('${t}')" class="pill px-3 py-1 rounded-full text-[11px] border ${MANAGE.type===t?'active':'border-gray-200 text-gray-500'}">${label}</button>`;
+  }).join('');
+  const tagBox = document.getElementById('manage-tag-filters');
+  tagBox.innerHTML = STATE.tags.map(t=>{
+    const active = MANAGE.tags.has(t.tag_name);
+    return `<button onclick="toggleManageTag('${t.tag_name}')" class="pill px-2.5 py-1 rounded-full text-[10px] border ${active?'active':'border-gray-200 text-gray-500'}">#${t.tag_name}</button>`;
+  }).join('');
+}
+function setManageType(t){ MANAGE.type = t; renderManageFilters(); renderManageGrid(); }
+function toggleManageTag(name){
+  MANAGE.tags.has(name) ? MANAGE.tags.delete(name) : MANAGE.tags.add(name);
+  renderManageFilters(); renderManageGrid();
+}
+
+function renderManageGrid(){
+  const grid = document.getElementById('manage-grid');
+  const files = manageFilteredFiles();
+  document.querySelector('.text-gray-500.text-xs')?.textContent; // no-op safeguard
+  grid.innerHTML = files.map(f=>{
+    const thumb = f.file_type==='image'
+      ? `https://lh3.googleusercontent.com/d/${f.file_id}`
+      : `https://drive.google.com/thumbnail?id=${f.file_id}&sz=w200`;
+    return `
+    <label class="relative block aspect-square rounded-lg overflow-hidden border cursor-pointer group">
+      <input type="checkbox" class="file-check absolute top-1 left-1 z-10 w-4 h-4" value="${f.file_id}">
+      <img src="${thumb}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/100?text=%F0%9F%93%84'">
+      ${f.show_hide==='hide' ? `<span class="absolute bottom-1 right-1 text-[9px] bg-black bg-opacity-70 text-white px-1.5 py-0.5 rounded-full"><i class="fa-solid fa-eye-slash"></i></span>` : ''}
+      ${f.file_type==='video' ? `<span class="absolute top-1 right-1 text-[9px] bg-black bg-opacity-70 text-white px-1 py-0.5 rounded"><i class="fa-solid fa-video"></i></span>` : ''}
+    </label>`;
+  }).join('') || `<div class="col-span-4 text-center text-xs text-gray-300 py-6">ไม่พบไฟล์ตามตัวกรอง</div>`;
+}
+
+function renderTagPicker(){
+  const box = document.getElementById('manage-tag-picker');
+  box.innerHTML = STATE.tags.map(t=>{
+    const active = MANAGE.pendingTagAdd.has(t.tag_name);
+    return `<button onclick="togglePendingTag('${t.tag_name}')" class="pill px-2.5 py-1 rounded-full text-[10px] border ${active?'active':'border-gray-200 text-gray-500'}">#${t.tag_name}</button>`;
+  }).join('') || `<span class="text-[11px] text-gray-300">ยังไม่มี tag ในระบบ สร้างใหม่ด้านล่าง</span>`;
+}
+function togglePendingTag(name){
+  MANAGE.pendingTagAdd.has(name) ? MANAGE.pendingTagAdd.delete(name) : MANAGE.pendingTagAdd.add(name);
+  renderTagPicker();
+}
+async function createNewTagInline(){
+  const input = document.getElementById('new-tag-input');
+  const name = input.value.trim();
+  if(!name) return;
+  await api('createTag', { tagName: name, visibility: '' });
+  STATE.tags.push({ tag_name: name, visibility: '' });
+  MANAGE.pendingTagAdd.add(name);
+  input.value = '';
+  renderTagPicker(); renderManageFilters(); renderFilters();
+  toast(`สร้าง tag #${name} แล้ว`);
+}
+async function applyTagsToSelected(){
+  const ids = getSelectedIds();
+  if(ids.length===0){ toast('ยังไม่ได้เลือกไฟล์', 'err'); return; }
+  if(MANAGE.pendingTagAdd.size===0){ toast('ยังไม่ได้เลือก tag', 'err'); return; }
+  await api('bulkUpdate', { fileIds: ids, tagsToAdd: Array.from(MANAGE.pendingTagAdd) });
+  toast(`ติด tag ให้ ${ids.length} ไฟล์แล้ว`);
+  MANAGE.pendingTagAdd.clear();
+  await refreshData();
 }
 
 function selectAllFiles(state){
@@ -461,18 +623,18 @@ function selectAllFiles(state){
 function getSelectedIds(){
   return Array.from(document.querySelectorAll('.file-check:checked')).map(c=>c.value);
 }
-async function bulkSetTag(){
-  const ids = getSelectedIds(); if(ids.length===0) return;
-  const tags = document.getElementById('bulk-tag').value;
-  await api('bulkUpdate', { fileIds: ids, tags });
-  toast(`ตั้ง tag ให้ ${ids.length} ไฟล์แล้ว`);
-  boot();
-}
 async function bulkSetShow(val){
-  const ids = getSelectedIds(); if(ids.length===0) return;
+  const ids = getSelectedIds(); if(ids.length===0){ toast('ยังไม่ได้เลือกไฟล์','err'); return; }
   await api('bulkUpdate', { fileIds: ids, showHide: val });
   toast(`${val==='show'?'เปิดตา':'ปิดตา'} ${ids.length} ไฟล์แล้ว`);
-  boot();
+  await refreshData();
+}
+async function bulkDelete(){
+  const ids = getSelectedIds(); if(ids.length===0){ toast('ยังไม่ได้เลือกไฟล์','err'); return; }
+  if(!confirm(`ลบข้อมูล ${ids.length} ไฟล์ออกจากระบบ? (ไฟล์จริงใน Drive จะไม่ถูกลบ)`)) return;
+  await api('deleteFiles', { fileIds: ids });
+  toast(`ลบ ${ids.length} ไฟล์ออกจากระบบแล้ว`);
+  await refreshData();
 }
 async function approveUser(uid, name, pic, role){
   await api('approveUser', { targetUid: uid, displayName: name, pictureUrl: pic, role });
