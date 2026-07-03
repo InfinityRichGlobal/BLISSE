@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blissé Exclusive Storage</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root{
+    --bg:#ffffff; --text:#171717; --border:#f0f0f0; --thumb-h:160px;
+  }
+  body{ font-family:'Prompt',sans-serif; background:var(--bg); color:var(--text); }
+  .card-clean{ transition:all .3s ease; border:1px solid var(--border); }
+  .card-clean:hover{ transform:translateY(-3px); box-shadow:0 12px 30px -8px rgba(0,0,0,.08); }
+  .loader{ border:2px solid #f3f3f3; border-top:2px solid var(--text); border-radius:50%; width:24px; height:24px; animation:spin 1s linear infinite; }
+  @keyframes spin{ 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
+  #lightbox{ backdrop-filter:blur(6px); }
+  .pill{ transition:all .2s ease; }
+  .pill.active{ background:var(--text); color:#fff; }
+  .gallery{ display:flex; flex-wrap:wrap; }
+  .gitem{ height:var(--thumb-h); flex-grow:1; margin:2px; position:relative; overflow:hidden; border-radius:.75rem; cursor:pointer; background:#fafafa; }
+  .gitem img,.gitem video{ height:100%; width:100%; object-fit:cover; display:block; }
+  .gitem .overlay{ position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,.55), transparent 40%); opacity:0; transition:opacity .2s; }
+  .gitem:hover .overlay{ opacity:1; }
+  .gitem .meta{ position:absolute; bottom:6px; left:8px; right:8px; color:#fff; font-size:11px; opacity:0; transition:opacity .2s; display:flex; justify-content:space-between; align-items:center; }
+  .gitem:hover .meta{ opacity:1; }
+  .toast{ animation:slideIn .3s ease; }
+  @keyframes slideIn{ from{transform:translateX(120%)} to{transform:translateX(0)} }
+  .progress-row{ display:flex; align-items:center; gap:.75rem; padding:.5rem .75rem; border-bottom:1px solid var(--border); }
+  ::-webkit-scrollbar{ width:6px; height:6px; }
+  ::-webkit-scrollbar-thumb{ background:#ddd; border-radius:10px; }
+</style>
+</head>
+<body class="px-4 md:px-16 py-6 md:py-10 min-h-screen">
+
+<div class="w-full max-w-[1700px] mx-auto">
+
+  <!-- HEADER -->
+  <div class="flex items-center justify-between mb-6 md:mb-10">
+    <div class="flex items-center gap-3">
+      <div id="logo-box" class="w-9 h-9 md:w-11 md:h-11 rounded-2xl bg-gray-100 flex items-center justify-center overflow-hidden"></div>
+      <div>
+        <h1 id="header-title" class="text-lg md:text-2xl font-medium tracking-wide">Blissé Exclusive Storage</h1>
+        <p id="header-sub" class="text-[10px] md:text-xs text-gray-400 font-light tracking-wider uppercase">Loading...</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-1 md:gap-2">
+      <div id="admin-buttons" class="hidden items-center gap-1 md:gap-2 mr-2">
+        <button onclick="openPanel('upload')" title="อัปโหลด" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-upload"></i></button>
+        <button onclick="openPanel('sync')" title="ซิงค์" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-rotate"></i></button>
+        <button onclick="openPanel('manage')" title="จัดการ" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-sliders"></i></button>
+      </div>
+      <button onclick="pickRandom()" title="สุ่ม" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-shuffle"></i></button>
+      <button onclick="boot()" title="รีเฟรช" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-arrows-rotate"></i></button>
+    </div>
+  </div>
+
+  <!-- FILTER BAR -->
+  <div id="filter-bar" class="mb-4 space-y-2 hidden">
+    <div id="type-filters" class="flex flex-wrap gap-2"></div>
+    <div id="tag-filters" class="flex flex-wrap gap-2"></div>
+  </div>
+
+  <!-- GALLERY -->
+  <div id="gallery" class="gallery"></div>
+
+  <div id="loading-state" class="flex flex-col items-center justify-center py-32 text-gray-400">
+    <div class="loader mb-4"></div>
+    <p class="font-light text-sm">กำลังโหลดคลังไฟล์...</p>
+  </div>
+
+  <div id="pending-state" class="hidden flex flex-col items-center justify-center py-32 text-gray-400 text-center">
+    <i class="fa-solid fa-hourglass-half text-3xl mb-4"></i>
+    <p class="font-light text-sm">บัญชีของคุณกำลังรอการอนุญาตจากแอดมิน</p>
+  </div>
+
+</div>
+
+<!-- LIGHTBOX -->
+<div id="lightbox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black bg-opacity-85">
+  <button onclick="closeLightbox()" class="absolute top-5 right-5 md:top-8 md:right-8 text-white text-3xl w-12 h-12 flex items-center justify-center z-10">&times;</button>
+  <button onclick="navLightbox(-1)" class="absolute left-2 md:left-8 text-white text-3xl w-12 h-12 flex items-center justify-center z-10"><i class="fa-solid fa-chevron-left"></i></button>
+  <button onclick="navLightbox(1)" class="absolute right-2 md:right-8 text-white text-3xl w-12 h-12 flex items-center justify-center z-10"><i class="fa-solid fa-chevron-right"></i></button>
+  <div id="lightbox-content" class="max-w-[90%] max-h-[85%] flex flex-col items-center"></div>
+  <div class="absolute bottom-6 flex gap-3 text-white text-sm">
+    <a id="lb-download" href="#" class="px-4 py-2 bg-white bg-opacity-10 rounded-full hover:bg-opacity-20"><i class="fa-solid fa-download mr-1"></i>ดาวน์โหลด</a>
+    <a id="lb-drive" href="#" target="_blank" class="px-4 py-2 bg-white bg-opacity-10 rounded-full hover:bg-opacity-20"><i class="fa-brands fa-google-drive mr-1"></i>เปิดใน Drive</a>
+  </div>
+</div>
+
+<!-- ADMIN SLIDE PANEL -->
+<div id="admin-panel" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black bg-opacity-40" onclick="closePanel()"></div>
+  <div class="absolute right-0 top-0 h-full w-full md:w-[520px] bg-white shadow-2xl overflow-y-auto">
+    <div class="p-5 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+      <h3 id="panel-title" class="font-medium text-lg"></h3>
+      <button onclick="closePanel()" class="text-2xl w-8 h-8 flex items-center justify-center text-gray-400 hover:text-black">&times;</button>
+    </div>
+    <div id="panel-body" class="p-5"></div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div id="toast-container" class="fixed bottom-5 right-5 z-[60] space-y-2"></div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbwXUxqRusM52UUAsnDotfMwUHrZ0U7r4QgoykYLpjhXlobQp97NDGRjiF9ENZ5nZ40o/exec";
+
+let STATE = {
+  uid: null, profile: null, role: null, approved: false,
+  config: {}, tags: [], files: [], showCounts: false,
+  activeType: 'all', activeTags: new Set(), currentSet: [], lightboxIndex: 0
+};
+
+// ---------------- LIFF BOOTSTRAP ----------------
+async function boot(){
+  document.getElementById('loading-state').classList.remove('hidden');
+  document.getElementById('gallery').innerHTML = '';
+  document.getElementById('pending-state').classList.add('hidden');
+  document.getElementById('filter-bar').classList.add('hidden');
+
+  // 1) โหลด config แบบ public ก่อน (ยังไม่ต้อง login)
+  const pre = await api('bootstrap');
+  applyTheme(pre.config);
+
+  // 2) LIFF init + login
+  try{
+    await liff.init({ liffId: pre.config.liff_channel_id });
+    if(!liff.isLoggedIn()){ liff.login(); return; }
+    const profile = await liff.getProfile();
+    STATE.uid = profile.userId; STATE.profile = profile;
+    await api('log', { uid: profile.userId, displayName: profile.displayName, pictureUrl: profile.pictureUrl }, true);
+  }catch(err){
+    console.error('LIFF error', err);
+  }
+
+  // 3) โหลดข้อมูลจริงตามสิทธิ์
+  const data = await api('bootstrap', { uid: STATE.uid });
+  STATE.role = data.role; STATE.approved = data.approved;
+  STATE.config = data.config; STATE.tags = data.tags; STATE.files = data.files;
+  STATE.showCounts = data.showCounts;
+  applyTheme(data.config);
+
+  document.getElementById('loading-state').classList.add('hidden');
+
+  if(!STATE.approved){
+    document.getElementById('pending-state').classList.remove('hidden');
+    return;
+  }
+  if(STATE.role === 'admin') document.getElementById('admin-buttons').classList.remove('hidden');
+
+  document.getElementById('filter-bar').classList.remove('hidden');
+  renderFilters();
+  applyFilters();
+}
+
+function applyTheme(cfg){
+  const root = document.documentElement.style;
+  if(cfg.theme_bg_color) root.setProperty('--bg', cfg.theme_bg_color);
+  if(cfg.theme_text_color) root.setProperty('--text', cfg.theme_text_color);
+  if(cfg.theme_border_color) root.setProperty('--border', cfg.theme_border_color);
+  if(cfg.thumbnail_height_px) root.setProperty('--thumb-h', cfg.thumbnail_height_px+'px');
+  document.getElementById('header-title').textContent = cfg.header_text || 'Blissé Exclusive Storage';
+  document.getElementById('header-sub').textContent = cfg.subhead_text || '';
+  const logoBox = document.getElementById('logo-box');
+  if(cfg.logo_url){
+    const img = `<img src="${cfg.logo_url}" class="w-full h-full object-contain">`;
+    logoBox.innerHTML = cfg.link_logo ? `<a href="${cfg.link_logo}" target="_blank" class="w-full h-full block">${img}</a>` : img;
+  }
+}
+
+// ---------------- API ----------------
+async function api(action, payload, isPost){
+  if(isPost || payload && Object.keys(payload).length){
+    // ใช้ POST เมื่อมี body action ที่ไม่ใช่ read-only bootstrap
+  }
+  if(action === 'bootstrap' || action === 'pendingUsers'){
+    const uid = (payload && payload.uid) || '';
+    const res = await fetch(`${API_URL}?action=${action}&uid=${encodeURIComponent(uid)}`);
+    return res.json();
+  }
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    body: JSON.stringify(Object.assign({ action, uid: STATE.uid }, payload || {}))
+  });
+  return res.json();
+}
+
+// ---------------- FILTERS ----------------
+function renderFilters(){
+  const counts = computeCounts();
+  const typeBar = document.getElementById('type-filters');
+  typeBar.innerHTML = ['all','image','video'].map(t=>{
+    const label = t==='all' ? 'ทั้งหมด' : (t==='image'?'📷 ภาพ':'🎬 วีดีโอ');
+    const n = counts.type[t] || 0;
+    const countStr = STATE.showCounts ? ` (${n})` : '';
+    return `<button onclick="setType('${t}')" class="pill px-4 py-1.5 rounded-full text-xs md:text-sm border ${STATE.activeType===t?'active':'border-gray-200 text-gray-600'}">${label}${countStr}</button>`;
+  }).join('');
+
+  const tagBar = document.getElementById('tag-filters');
+  tagBar.innerHTML = STATE.tags.map(t=>{
+    const n = counts.tags[t.tag_name] || 0;
+    const active = STATE.activeTags.has(t.tag_name);
+    const countStr = STATE.showCounts ? ` (${n})` : '';
+    return `<button onclick="toggleTag('${t.tag_name}')" class="pill px-3 py-1 rounded-full text-[11px] md:text-xs border ${active?'active':'border-gray-200 text-gray-500'}">#${t.tag_name}${countStr}</button>`;
+  }).join('');
+}
+
+function computeCounts(){
+  // cascading: type counts respect active tags; tag counts respect active type
+  const byTag = STATE.files.filter(f => STATE.activeTags.size===0 || fileTags(f).some(t=>STATE.activeTags.has(t)));
+  const byType = STATE.files.filter(f => STATE.activeType==='all' || f.file_type===STATE.activeType);
+
+  const typeCounts = { all: byTag.length,
+    image: byTag.filter(f=>f.file_type==='image').length,
+    video: byTag.filter(f=>f.file_type==='video').length };
+
+  const tagCounts = {};
+  STATE.tags.forEach(t=>{
+    tagCounts[t.tag_name] = byType.filter(f=>fileTags(f).includes(t.tag_name)).length;
+  });
+  return { type: typeCounts, tags: tagCounts };
+}
+
+function fileTags(f){ return (f.tags||'').split(',').map(s=>s.trim()).filter(Boolean); }
+
+function setType(t){ STATE.activeType = t; renderFilters(); applyFilters(); }
+function toggleTag(name){
+  STATE.activeTags.has(name) ? STATE.activeTags.delete(name) : STATE.activeTags.add(name);
+  renderFilters(); applyFilters();
+}
+
+function applyFilters(){
+  let list = STATE.files;
+  if(STATE.activeType !== 'all') list = list.filter(f=>f.file_type===STATE.activeType);
+  if(STATE.activeTags.size>0) list = list.filter(f=>fileTags(f).some(t=>STATE.activeTags.has(t)));
+  STATE.currentSet = list;
+  renderGallery(list);
+}
+
+function pickRandom(){
+  const shuffled = [...STATE.currentSet].sort(()=>Math.random()-0.5);
+  renderGallery(shuffled);
+}
+
+// ---------------- GALLERY ----------------
+function renderGallery(list){
+  const g = document.getElementById('gallery');
+  if(list.length===0){ g.innerHTML = `<div class="w-full text-center py-20 text-gray-300 text-sm">ไม่พบไฟล์</div>`; return; }
+  g.innerHTML = list.map((f,i)=>{
+    const thumb = f.file_type==='image'
+      ? `https://lh3.googleusercontent.com/d/${f.file_id}`
+      : `https://drive.google.com/thumbnail?id=${f.file_id}&sz=w400`;
+    const hidden = f.show_hide==='hide' ? `<span class="absolute top-2 left-2 text-[10px] bg-black bg-opacity-60 text-white px-2 py-0.5 rounded-full"><i class="fa-solid fa-eye-slash mr-1"></i>ซ่อน</span>` : '';
+    return `
+    <div class="gitem" style="width:calc(var(--thumb-h) * 1.4)" onclick="openLightbox(${i})">
+      <img src="${thumb}" loading="lazy" onerror="this.src='https://via.placeholder.com/300x${STATE.config.thumbnail_height_px||160}?text=...'">
+      ${hidden}
+      <div class="overlay"></div>
+      <div class="meta"><span class="truncate">${f.file_name}</span>
+        <a href="${f.file_url}" target="_blank" onclick="event.stopPropagation()"><i class="fa-brands fa-google-drive"></i></a>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---------------- LIGHTBOX ----------------
+function openLightbox(i){
+  STATE.lightboxIndex = i;
+  renderLightbox();
+  document.getElementById('lightbox').classList.remove('hidden');
+  document.getElementById('lightbox').classList.add('flex');
+}
+function closeLightbox(){
+  document.getElementById('lightbox').classList.add('hidden');
+  document.getElementById('lightbox').classList.remove('flex');
+}
+function navLightbox(dir){
+  const len = STATE.currentSet.length;
+  STATE.lightboxIndex = (STATE.lightboxIndex + dir + len) % len;
+  renderLightbox();
+}
+function renderLightbox(){
+  const f = STATE.currentSet[STATE.lightboxIndex];
+  const content = document.getElementById('lightbox-content');
+  if(f.file_type==='image'){
+    content.innerHTML = `<img src="https://lh3.googleusercontent.com/d/${f.file_id}" class="max-w-full max-h-[75vh] rounded-2xl object-contain">`;
+  }else{
+    content.innerHTML = `<iframe src="https://drive.google.com/file/d/${f.file_id}/preview" class="w-[80vw] md:w-[600px] h-[45vw] md:h-[340px] rounded-2xl" allow="autoplay"></iframe>`;
+  }
+  document.getElementById('lb-download').href = `https://drive.google.com/uc?export=download&id=${f.file_id}`;
+  document.getElementById('lb-drive').href = f.file_url;
+}
+document.addEventListener('keydown', e=>{
+  if(document.getElementById('lightbox').classList.contains('hidden')) return;
+  if(e.key==='ArrowLeft') navLightbox(-1);
+  if(e.key==='ArrowRight') navLightbox(1);
+  if(e.key==='Escape') closeLightbox();
+});
+
+// ---------------- TOAST ----------------
+function toast(msg, type='ok'){
+  const el = document.createElement('div');
+  el.className = 'toast bg-white border border-gray-200 shadow-lg rounded-2xl px-4 py-3 text-sm flex items-center gap-2';
+  el.innerHTML = `<i class="fa-solid ${type==='ok'?'fa-circle-check text-green-500':'fa-circle-exclamation text-red-500'}"></i> ${msg}`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>el.remove(), 4000);
+}
+
+// ---------------- ADMIN PANEL ----------------
+function closePanel(){ document.getElementById('admin-panel').classList.add('hidden'); }
+
+function openPanel(type){
+  document.getElementById('admin-panel').classList.remove('hidden');
+  const title = document.getElementById('panel-title');
+  const body = document.getElementById('panel-body');
+  if(type==='upload'){
+    title.textContent = 'อัปโหลดไฟล์';
+    body.innerHTML = `
+      <input type="file" id="upload-input" multiple accept="image/*,video/*" class="mb-3 block w-full text-sm">
+      <input type="text" id="upload-tags" placeholder="tag (คั่นด้วย , )" class="mb-3 w-full border rounded-xl px-3 py-2 text-sm">
+      <button onclick="startUpload()" class="w-full bg-black text-white rounded-xl py-2 text-sm mb-4">เริ่มอัปโหลด</button>
+      <div id="upload-progress" class="border rounded-xl overflow-hidden"></div>
+      <div id="upload-summary" class="text-xs text-gray-500 mt-2"></div>`;
+  }
+  if(type==='sync'){
+    title.textContent = 'ซิงค์จาก Drive';
+    body.innerHTML = `
+      <textarea id="sync-input" rows="4" placeholder="วาง Folder ID หรือ Full Link ทีละบรรทัด" class="mb-3 w-full border rounded-xl px-3 py-2 text-sm"></textarea>
+      <button onclick="startSync()" class="w-full bg-black text-white rounded-xl py-2 text-sm mb-4">เริ่มซิงค์</button>
+      <div id="sync-progress" class="text-sm"></div>`;
+  }
+  if(type==='manage'){
+    title.textContent = 'จัดการไฟล์ / ผู้ใช้';
+    renderManagePanel(body);
+  }
+}
+
+// ---- upload with progress ----
+async function startUpload(){
+  const input = document.getElementById('upload-input');
+  const tags = document.getElementById('upload-tags').value;
+  const files = Array.from(input.files);
+  if(files.length===0) return;
+  const progressBox = document.getElementById('upload-progress');
+  progressBox.innerHTML = '';
+  let success=0, fail=0;
+
+  for(const [idx, file] of files.entries()){
+    const row = document.createElement('div');
+    row.className = 'progress-row';
+    const localUrl = URL.createObjectURL(file);
+    row.innerHTML = `
+      ${file.type.startsWith('video') ? `<video src="${localUrl}" class="w-10 h-10 rounded-lg object-cover"></video>` : `<img src="${localUrl}" class="w-10 h-10 rounded-lg object-cover">`}
+      <div class="flex-1 truncate text-xs">${file.name}</div>
+      <div id="status-${idx}" class="text-xs text-gray-400">รอคิว...</div>`;
+    progressBox.appendChild(row);
+  }
+
+  for(const [idx, file] of files.entries()){
+    const statusEl = document.getElementById(`status-${idx}`);
+    statusEl.textContent = 'กำลังอัปโหลด...';
+    try{
+      const base64 = await fileToBase64(file);
+      statusEl.textContent = 'กำลังบันทึกลงชีต...';
+      const res = await api('upload', { fileName: file.name, mimeType: file.type, base64, tags });
+      if(res.ok){ statusEl.innerHTML = '<span class="text-green-600">✅ สำเร็จ</span>'; success++; }
+      else{ statusEl.innerHTML = '<span class="text-red-500">❌ ล้มเหลว</span>'; fail++; }
+    }catch(err){
+      statusEl.innerHTML = '<span class="text-red-500">❌ ล้มเหลว</span>'; fail++;
+    }
+    document.getElementById('upload-summary').textContent = `สำเร็จ ${success} | ล้มเหลว ${fail} | ทั้งหมด ${files.length}`;
+  }
+  toast(`อัปโหลดเสร็จ: สำเร็จ ${success}, ล้มเหลว ${fail}`);
+  boot();
+}
+
+function fileToBase64(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ---- sync with chunk progress ----
+async function startSync(){
+  const raw = document.getElementById('sync-input').value;
+  const ids = raw.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(ids.length===0) return;
+  const box = document.getElementById('sync-progress');
+  box.innerHTML = `<div class="loader mb-2"></div><div id="sync-status">กำลังสแกนโฟลเดอร์...</div>`;
+
+  let done = false, totalAdded=0, totalSkipped=0;
+  while(!done){
+    const res = await api('sync', { folderIds: ids });
+    if(res.error){ box.innerHTML = `<span class="text-red-500">${res.error}</span>`; return; }
+    done = res.done;
+    totalAdded += res.addedThisBatch; totalSkipped += res.skippedThisBatch;
+    document.getElementById('sync-status').textContent =
+      `กำลังประมวลผล ${res.progress}/${res.total} — เพิ่ม ${totalAdded} | ข้ามซ้ำ ${totalSkipped}`;
+  }
+  box.innerHTML += `<div class="mt-2 text-green-600 text-sm">✅ เสร็จสิ้น: เพิ่ม ${totalAdded} ไฟล์ ข้ามซ้ำ ${totalSkipped} ไฟล์</div>`;
+  toast(`ซิงค์เสร็จ: เพิ่ม ${totalAdded}, ข้าม ${totalSkipped}`);
+  boot();
+}
+
+// ---- manage panel ----
+async function renderManagePanel(body){
+  body.innerHTML = `
+    <div class="mb-4">
+      <h4 class="text-sm font-medium mb-2">คำขอเข้าใช้งาน</h4>
+      <div id="pending-list" class="text-xs text-gray-400">กำลังโหลด...</div>
+    </div>
+    <hr class="my-4">
+    <div>
+      <h4 class="text-sm font-medium mb-2">ไฟล์ทั้งหมด (${STATE.files.length})</h4>
+      <div class="flex gap-2 mb-2">
+        <button onclick="selectAllFiles(true)" class="text-xs underline">เลือกทั้งหมด</button>
+        <button onclick="selectAllFiles(false)" class="text-xs underline">ยกเลิกเลือก</button>
+      </div>
+      <div class="flex gap-2 mb-3">
+        <input id="bulk-tag" placeholder="ตั้ง tag (คั่น ,)" class="flex-1 border rounded-lg px-2 py-1 text-xs">
+        <button onclick="bulkSetTag()" class="text-xs bg-black text-white px-3 py-1 rounded-lg">ตั้ง Tag</button>
+      </div>
+      <div class="flex gap-2 mb-3">
+        <button onclick="bulkSetShow('show')" class="flex-1 text-xs border rounded-lg py-1"><i class="fa-solid fa-eye mr-1"></i>เปิดตา</button>
+        <button onclick="bulkSetShow('hide')" class="flex-1 text-xs border rounded-lg py-1"><i class="fa-solid fa-eye-slash mr-1"></i>ปิดตา</button>
+      </div>
+      <div id="manage-list" class="max-h-80 overflow-y-auto border rounded-xl"></div>
+    </div>`;
+
+  document.getElementById('manage-list').innerHTML = STATE.files.map(f=>`
+    <label class="flex items-center gap-2 px-3 py-2 border-b text-xs">
+      <input type="checkbox" class="file-check" value="${f.file_id}">
+      <img src="https://lh3.googleusercontent.com/d/${f.file_id}" class="w-8 h-8 rounded object-cover" onerror="this.style.display='none'">
+      <span class="flex-1 truncate">${f.file_name}</span>
+      <span class="text-gray-400">${f.show_hide}</span>
+    </label>`).join('');
+
+  const pending = await api('pendingUsers', { uid: STATE.uid });
+  const list = document.getElementById('pending-list');
+  if(!pending.pending || pending.pending.length===0){ list.textContent = 'ไม่มีคำขอค้าง'; return; }
+  list.innerHTML = pending.pending.map(p=>`
+    <div class="flex items-center gap-2 mb-2">
+      <img src="${p.picture_url}" class="w-8 h-8 rounded-full">
+      <span class="flex-1 text-xs">${p.display_name}</span>
+      <button onclick="approveUser('${p.line_user_id}','${p.display_name}','${p.picture_url}','user')" class="text-[10px] bg-black text-white px-2 py-1 rounded-full">สมาชิก</button>
+      <button onclick="approveUser('${p.line_user_id}','${p.display_name}','${p.picture_url}','admin')" class="text-[10px] border px-2 py-1 rounded-full">แอดมิน</button>
+    </div>`).join('');
+}
+
+function selectAllFiles(state){
+  document.querySelectorAll('.file-check').forEach(c=>c.checked=state);
+}
+function getSelectedIds(){
+  return Array.from(document.querySelectorAll('.file-check:checked')).map(c=>c.value);
+}
+async function bulkSetTag(){
+  const ids = getSelectedIds(); if(ids.length===0) return;
+  const tags = document.getElementById('bulk-tag').value;
+  await api('bulkUpdate', { fileIds: ids, tags });
+  toast(`ตั้ง tag ให้ ${ids.length} ไฟล์แล้ว`);
+  boot();
+}
+async function bulkSetShow(val){
+  const ids = getSelectedIds(); if(ids.length===0) return;
+  await api('bulkUpdate', { fileIds: ids, showHide: val });
+  toast(`${val==='show'?'เปิดตา':'ปิดตา'} ${ids.length} ไฟล์แล้ว`);
+  boot();
+}
+async function approveUser(uid, name, pic, role){
+  await api('approveUser', { targetUid: uid, displayName: name, pictureUrl: pic, role });
+  toast(`อนุมัติ ${name} เป็น ${role} แล้ว`);
+  openPanel('manage');
+}
+
+window.onload = boot;
+</script>
+</body>
+</html>
