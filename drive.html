@@ -54,6 +54,7 @@
       </div>
     </div>
     <div id="admin-buttons" class="hidden flex flex-wrap justify-end items-center gap-1 md:gap-1.5 mt-2">
+      <button id="shortcut-toggle-btn" onclick="toggleAdminShortcuts()" title="เปิด/ปิดปุ่มลัดบนการ์ด (ตา/ลบ)" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-eye"></i></button>
       <button onclick="openPanel('upload')" title="อัปโหลด" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-upload"></i></button>
       <button onclick="openPanel('sync')" title="ซิงค์" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-rotate"></i></button>
       <button onclick="openPanel('manage')" title="จัดการ" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-sliders"></i></button>
@@ -62,6 +63,7 @@
 
   <!-- FILTER BAR -->
   <div id="filter-bar" class="mb-4 space-y-2 hidden">
+    <div id="admin-filters" class="flex flex-wrap gap-2"></div>
     <div id="type-filters" class="flex flex-wrap gap-2"></div>
     <div id="tag-filters" class="flex flex-wrap gap-2"></div>
   </div>
@@ -180,7 +182,7 @@ function handleThumbError(imgEl, isVideo){
 let STATE = {
   uid: null, profile: null, role: null, approved: false,
   config: {}, tags: [], files: [], showCounts: false,
-  activeType: 'all', activeTags: new Set(), currentSet: [], lightboxIndex: 0
+  activeType: 'all', activeTags: new Set(), untaggedOnly: false, hiddenOnly: false, currentSet: [], lightboxIndex: 0
 };
 
 // ---------------- LIFF BOOTSTRAP ----------------
@@ -218,7 +220,10 @@ async function boot(){
     document.getElementById('pending-state').classList.remove('hidden');
     return;
   }
-  if(STATE.role === 'admin') document.getElementById('admin-buttons').style.display = 'flex';
+  if(STATE.role === 'admin'){
+    document.getElementById('admin-buttons').style.display = 'flex';
+    updateShortcutToggleBtn();
+  }
 
   document.getElementById('filter-bar').classList.remove('hidden');
   renderFilters();
@@ -260,6 +265,19 @@ async function api(action, payload, isPost){
 // ---------------- FILTERS ----------------
 function renderFilters(){
   const counts = computeCounts();
+
+  // แถวบนสุด: ฟังก์ชันเฉพาะแอดมิน (ไม่มี tag / ไฟล์ที่ซ่อนอยู่)
+  const adminBar = document.getElementById('admin-filters');
+  if(STATE.role === 'admin'){
+    const untaggedStr = STATE.showCounts ? ` (${counts.untagged})` : '';
+    const hiddenStr = STATE.showCounts ? ` (${counts.hidden})` : '';
+    adminBar.innerHTML = `
+      <button onclick="toggleUntagged()" class="pill px-3 py-1 rounded-full text-[11px] md:text-xs border ${STATE.untaggedOnly?'active':'border-gray-200 text-gray-500'}"><i class="fa-solid fa-tag mr-1"></i>ไม่มี tag${untaggedStr}</button>
+      <button onclick="toggleHidden()" class="pill px-3 py-1 rounded-full text-[11px] md:text-xs border ${STATE.hiddenOnly?'active':'border-gray-200 text-gray-500'}"><i class="fa-solid fa-eye-slash mr-1"></i>ซ่อนอยู่${hiddenStr}</button>`;
+  } else {
+    adminBar.innerHTML = '';
+  }
+
   const typeBar = document.getElementById('type-filters');
   typeBar.innerHTML = ['all','image','video'].map(t=>{
     const label = t==='all' ? 'ทั้งหมด' : (t==='image'?'<i class="fa-solid fa-image mr-1"></i>ภาพ':'<i class="fa-solid fa-video mr-1"></i>วีดีโอ');
@@ -278,9 +296,16 @@ function renderFilters(){
 }
 
 function computeCounts(){
+  // ชั้นฐาน: โหมด "ซ่อนอยู่" กรองก่อนทุกอย่าง — ทุกตัวเลขบนจอจะนับจากไฟล์ที่ซ่อนเท่านั้น
+  // ทำให้แอดมินเห็นทันทีว่าแต่ละ tag/อัลบั้ม มีไฟล์ซ่อนอยู่กี่ไฟล์
+  const base = STATE.hiddenOnly ? STATE.files.filter(f=>f.show_hide==='hide') : STATE.files;
+
   // cascading: type counts respect active tags; tag counts respect active type
-  const byTag = STATE.files.filter(f => STATE.activeTags.size===0 || fileTags(f).some(t=>STATE.activeTags.has(t)));
-  const byType = STATE.files.filter(f => STATE.activeType==='all' || f.file_type===STATE.activeType);
+  const byTag = base.filter(f => {
+    if(STATE.untaggedOnly) return fileTags(f).length===0;
+    return STATE.activeTags.size===0 || fileTags(f).some(t=>STATE.activeTags.has(t));
+  });
+  const byType = base.filter(f => STATE.activeType==='all' || f.file_type===STATE.activeType);
 
   const typeCounts = { all: byTag.length,
     image: byTag.filter(f=>f.file_type==='image').length,
@@ -290,21 +315,38 @@ function computeCounts(){
   STATE.tags.forEach(t=>{
     tagCounts[t.tag_name] = byType.filter(f=>fileTags(f).includes(t.tag_name)).length;
   });
-  return { type: typeCounts, tags: tagCounts };
+  const untaggedCount = byType.filter(f=>fileTags(f).length===0).length;
+  // จำนวนไฟล์ซ่อนทั้งหมด (นับจากทุกไฟล์เสมอ ไม่ขึ้นกับโหมด เพื่อให้ปุ่มฟ้องยอดจริงตลอด)
+  const hiddenCount = STATE.files.filter(f=>f.show_hide==='hide')
+    .filter(f => STATE.activeType==='all' || f.file_type===STATE.activeType).length;
+  return { type: typeCounts, tags: tagCounts, untagged: untaggedCount, hidden: hiddenCount };
 }
 
 function fileTags(f){ return (f.tags||'').split(',').map(s=>s.trim()).filter(Boolean); }
 
 function setType(t){ STATE.activeType = t; renderFilters(); applyFilters(); }
 function toggleTag(name){
+  STATE.untaggedOnly = false; // เลือก tag ปกติ = ออกจากโหมดไม่มี tag
   STATE.activeTags.has(name) ? STATE.activeTags.delete(name) : STATE.activeTags.add(name);
+  renderFilters(); applyFilters();
+}
+function toggleUntagged(){
+  STATE.untaggedOnly = !STATE.untaggedOnly;
+  if(STATE.untaggedOnly) STATE.activeTags.clear(); // โหมดไม่มี tag ใช้ร่วมกับ tag อื่นไม่ได้โดยนิยาม
+  renderFilters(); applyFilters();
+}
+function toggleHidden(){
+  // โหมดซ่อนอยู่ใช้ร่วมกับ tag ได้ (เพื่อไล่ดูไฟล์ซ่อนรายอัลบั้ม)
+  STATE.hiddenOnly = !STATE.hiddenOnly;
   renderFilters(); applyFilters();
 }
 
 function applyFilters(){
   let list = STATE.files;
+  if(STATE.hiddenOnly) list = list.filter(f=>f.show_hide==='hide');
   if(STATE.activeType !== 'all') list = list.filter(f=>f.file_type===STATE.activeType);
-  if(STATE.activeTags.size>0) list = list.filter(f=>fileTags(f).some(t=>STATE.activeTags.has(t)));
+  if(STATE.untaggedOnly) list = list.filter(f=>fileTags(f).length===0);
+  else if(STATE.activeTags.size>0) list = list.filter(f=>fileTags(f).some(t=>STATE.activeTags.has(t)));
   renderGallery(list);
 }
 
@@ -1102,6 +1144,35 @@ async function bulkDelete(){
   toast(`ลบ ${ids.length} ไฟล์ออกจากระบบแล้ว`);
   await refreshData();
 }
+// ---- toggle ปุ่มลัดบนการ์ด (show_admin_shortcuts) จากหน้าเว็บ ไม่ต้องไปแก้ชีต ----
+function shortcutsOn(){
+  return String(STATE.config.show_admin_shortcuts).toLowerCase() !== 'false';
+}
+function updateShortcutToggleBtn(){
+  const btn = document.getElementById('shortcut-toggle-btn');
+  if(!btn) return;
+  if(shortcutsOn()){
+    // เปิด = พื้นดำตัวขาว (ภาษาเดียวกับ pill active ตามธีม)
+    btn.className = 'w-9 h-9 md:w-10 md:h-10 rounded-xl bg-black text-white flex items-center justify-center';
+    btn.innerHTML = '<i class="fa-solid fa-eye"></i>';
+  } else {
+    btn.className = 'w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-400 hover:text-black hover:bg-gray-100 flex items-center justify-center';
+    btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
+  }
+}
+async function toggleAdminShortcuts(){
+  const newVal = shortcutsOn() ? 'FALSE' : 'TRUE';
+  STATE.config.show_admin_shortcuts = newVal; // อัปเดตหน้าจอทันที ไม่รอเซิร์ฟเวอร์
+  updateShortcutToggleBtn();
+  applyFilters(); // re-render การ์ดให้ปุ่มลัดโผล่/หายทันที
+  const res = await api('setConfig', { key: 'show_admin_shortcuts', value: newVal });
+  if(res.error){
+    toast('บันทึกลงชีตไม่สำเร็จ: ' + res.error, 'err');
+    return;
+  }
+  toast(newVal==='TRUE' ? 'เปิดปุ่มลัดบนการ์ดแล้ว' : 'ปิดปุ่มลัดบนการ์ดแล้ว');
+}
+
 function showProfilePic(url){
   if(!url) return;
   document.getElementById('profile-viewer-img').src = url;
