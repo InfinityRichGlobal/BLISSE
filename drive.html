@@ -82,7 +82,7 @@
 </div>
 
 <!-- LIGHTBOX -->
-<div id="lightbox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black bg-opacity-85">
+<div id="lightbox" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black bg-opacity-85">
   <button onclick="closeLightbox()" class="absolute top-5 right-5 md:top-8 md:right-8 text-white text-3xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-xmark"></i></button>
   <button onclick="navLightbox(-1)" class="absolute left-2 md:left-8 top-1/2 -translate-y-1/2 text-white text-2xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-chevron-left"></i></button>
   <button onclick="navLightbox(1)" class="absolute right-2 md:right-8 top-1/2 -translate-y-1/2 text-white text-2xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-chevron-right"></i></button>
@@ -110,7 +110,7 @@
 </div>
 
 <!-- TAG EDITOR MODAL (เปิดจาก lightbox เพื่อจัดการ tag ไฟล์เดียวแบบเร็ว) -->
-<div id="tag-editor-modal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black bg-opacity-50 px-6">
+<div id="tag-editor-modal" class="fixed inset-0 z-[120] hidden items-center justify-center bg-black bg-opacity-50 px-6">
   <div class="bg-white rounded-2xl p-5 max-w-xs w-full shadow-2xl">
     <p class="text-sm font-medium mb-3"><i class="fa-solid fa-tags mr-1.5"></i>จัดการ Tag</p>
     <div id="tag-editor-list" class="flex flex-wrap gap-1.5 mb-3 max-h-48 overflow-y-auto"></div>
@@ -126,7 +126,7 @@
 </div>
 
 <!-- CONFIRM MODAL (แทน browser confirm ที่โดนบล็อกใน webview บางที่) -->
-<div id="confirm-modal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black bg-opacity-40 px-6">
+<div id="confirm-modal" class="fixed inset-0 z-[120] hidden items-center justify-center bg-black bg-opacity-40 px-6">
   <div class="bg-white rounded-2xl p-6 max-w-xs w-full shadow-2xl">
     <p id="confirm-message" class="text-sm mb-5 text-center leading-relaxed"></p>
     <div class="flex gap-2">
@@ -136,8 +136,13 @@
   </div>
 </div>
 
+<!-- PROFILE PICTURE VIEWER -->
+<div id="profile-viewer" class="fixed inset-0 z-[125] hidden items-center justify-center bg-black bg-opacity-70 px-8" onclick="this.style.display='none'">
+  <img id="profile-viewer-img" src="" class="max-w-[280px] max-h-[280px] rounded-3xl shadow-2xl object-cover">
+</div>
+
 <!-- TOAST CONTAINER -->
-<div id="toast-container" class="fixed bottom-5 right-5 z-[60] space-y-2"></div>
+<div id="toast-container" class="fixed bottom-5 right-5 z-[130] space-y-2"></div>
 
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbwElaS5cdJ5L3yLLfksKvPDo3NHtkjqa2DFGHzbMdkUMRUTZLR4R6gjD5pn2nVF4wiF/exec";
@@ -888,32 +893,22 @@ async function renderManagePanel(body){
       <h4 class="text-sm font-medium mb-2">คำขอเข้าใช้งาน</h4>
       <div id="pending-list" class="text-xs text-gray-400">กำลังโหลด...</div>
     </div>
-    <hr class="my-4">
 
-    <div class="mb-4">
-      <h4 class="text-sm font-medium mb-2"><i class="fa-solid fa-users mr-1"></i>ผู้ใช้ทั้งหมดในระบบ</h4>
-      <div class="flex gap-2 mb-2">
-        <button onclick="selectAllUsers(true)" class="text-xs underline">เลือกทั้งหมด</button>
-        <button onclick="selectAllUsers(false)" class="text-xs underline">ยกเลิกเลือก</button>
+    <details class="mb-4 border rounded-xl overflow-hidden">
+      <summary class="text-sm font-medium px-3 py-2.5 cursor-pointer bg-gray-50 hover:bg-gray-100 select-none"><i class="fa-solid fa-users mr-1"></i>ผู้ใช้ทั้งหมดในระบบ <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 ml-1"></i></summary>
+      <div class="p-3">
+        <div class="flex gap-2 mb-2">
+          <button onclick="selectAllUsers(true)" class="text-xs underline">เลือกทั้งหมด</button>
+          <button onclick="selectAllUsers(false)" class="text-xs underline">ยกเลิกเลือก</button>
+        </div>
+        <div id="all-users-list" class="border rounded-xl max-h-48 overflow-y-auto mb-2 text-xs text-gray-400"><div class="p-3">กำลังโหลด...</div></div>
+        <div class="flex gap-2">
+          <button onclick="bulkSetUserRole('user')" class="flex-1 text-xs border rounded-lg py-1.5">ตั้งเป็นสมาชิก</button>
+          <button onclick="bulkSetUserRole('admin')" class="flex-1 text-xs border rounded-lg py-1.5">ตั้งเป็นแอดมิน</button>
+          <button onclick="bulkRemoveUsers()" class="flex-1 text-xs border border-red-200 text-red-500 rounded-lg py-1.5">ถอนสิทธิ์</button>
+        </div>
       </div>
-      <div id="all-users-list" class="border rounded-xl max-h-48 overflow-y-auto mb-2 text-xs text-gray-400"><div class="p-3">กำลังโหลด...</div></div>
-      <div class="flex gap-2">
-        <button onclick="bulkSetUserRole('user')" class="flex-1 text-xs border rounded-lg py-1.5">ตั้งเป็นสมาชิก</button>
-        <button onclick="bulkSetUserRole('admin')" class="flex-1 text-xs border rounded-lg py-1.5">ตั้งเป็นแอดมิน</button>
-        <button onclick="bulkRemoveUsers()" class="flex-1 text-xs border border-red-200 text-red-500 rounded-lg py-1.5">ถอนสิทธิ์</button>
-      </div>
-    </div>
-    <hr class="my-4">
-
-    <div class="mb-4">
-      <h4 class="text-sm font-medium mb-2"><i class="fa-solid fa-tags mr-1"></i>จัดการสิทธิ์ Tag ในระบบ</h4>
-      <p class="text-[10px] text-gray-400 mb-2">tag ที่ตั้ง "เฉพาะแอดมิน" — ไฟล์ที่ติด tag นั้นจะถูกซ่อนจาก user ทั่วไปทั้งหมด</p>
-      <div id="tag-visibility-list" class="border rounded-xl max-h-40 overflow-y-auto mb-2 text-xs"></div>
-      <div class="flex gap-2">
-        <button onclick="bulkSetTagVisibility('admin')" class="flex-1 text-xs border rounded-lg py-1.5"><i class="fa-solid fa-lock mr-1"></i>เฉพาะแอดมิน</button>
-        <button onclick="bulkSetTagVisibility('')" class="flex-1 text-xs border rounded-lg py-1.5"><i class="fa-solid fa-lock-open mr-1"></i>ทุกคนเห็น</button>
-      </div>
-    </div>
+    </details>
     <hr class="my-4">
 
     <h4 class="text-sm font-medium mb-2">กรองไฟล์เพื่อจัดการ</h4>
@@ -948,7 +943,20 @@ async function renderManagePanel(body){
       <button onclick="bulkSetShow('hide')" class="flex-1 text-xs border rounded-lg py-1.5"><i class="fa-solid fa-eye-slash mr-1"></i>ปิดตา</button>
     </div>
     <button onclick="bulkDelete()" class="w-full text-xs border border-red-200 text-red-500 rounded-lg py-1.5 mb-2"><i class="fa-solid fa-trash mr-1"></i>ลบไฟล์ที่เลือกออกจากระบบ</button>
-    <p class="text-[10px] text-gray-400">การลบจะลบเฉพาะข้อมูลในระบบ ไม่ลบไฟล์จริงใน Google Drive</p>`;
+    <p class="text-[10px] text-gray-400">การลบจะลบเฉพาะข้อมูลในระบบ ไม่ลบไฟล์จริงใน Google Drive</p>
+    <hr class="my-4">
+
+    <details class="mb-4 border rounded-xl overflow-hidden">
+      <summary class="text-sm font-medium px-3 py-2.5 cursor-pointer bg-gray-50 hover:bg-gray-100 select-none"><i class="fa-solid fa-tags mr-1"></i>จัดการสิทธิ์ Tag ในระบบ <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 ml-1"></i></summary>
+      <div class="p-3">
+        <p class="text-[10px] text-gray-400 mb-2">tag ที่ตั้ง "เฉพาะแอดมิน" — ไฟล์ที่ติด tag นั้นจะถูกซ่อนจาก user ทั่วไปทั้งหมด</p>
+        <div id="tag-visibility-list" class="border rounded-xl max-h-40 overflow-y-auto mb-2 text-xs"></div>
+        <div class="flex gap-2">
+          <button onclick="bulkSetTagVisibility('admin')" class="flex-1 text-xs border rounded-lg py-1.5"><i class="fa-solid fa-lock mr-1"></i>เฉพาะแอดมิน</button>
+          <button onclick="bulkSetTagVisibility('')" class="flex-1 text-xs border rounded-lg py-1.5"><i class="fa-solid fa-lock-open mr-1"></i>ทุกคนเห็น</button>
+        </div>
+      </div>
+    </details>`;
 
   renderManageFilters();
   renderManageGrid();
@@ -963,7 +971,7 @@ async function renderManagePanel(body){
   else{
     list.innerHTML = pending.pending.map(p=>`
       <div class="flex items-center gap-2 mb-2">
-        <img src="${p.picture_url}" class="w-8 h-8 rounded-full">
+        <img src="${p.picture_url}" class="w-8 h-8 rounded-full cursor-zoom-in" onclick="showProfilePic('${p.picture_url}')">
         <span class="flex-1 text-xs">${p.display_name}</span>
         <button onclick="approveUser('${p.line_user_id}','${p.display_name}','${p.picture_url}','user')" class="text-[10px] bg-black text-white px-2 py-1 rounded-full">สมาชิก</button>
         <button onclick="approveUser('${p.line_user_id}','${p.display_name}','${p.picture_url}','admin')" class="text-[10px] border px-2 py-1 rounded-full">แอดมิน</button>
@@ -1008,9 +1016,9 @@ function renderManageGrid(){
       ? `https://lh3.googleusercontent.com/d/${f.file_id}`
       : `https://drive.google.com/thumbnail?id=${f.file_id}&sz=w200`;
     return `
-    <label class="relative block rounded-lg overflow-hidden border border-gray-200 cursor-pointer group bg-gray-50" style="aspect-ratio:1/1; min-height:70px">
+    <label class="relative block rounded-lg overflow-hidden border border-gray-200 cursor-pointer group bg-gray-50" style="height:110px">
       <input type="checkbox" class="file-check absolute top-1 left-1 z-10 w-4 h-4" value="${f.file_id}">
-      <img src="${thumb}" data-original="${thumb}" class="w-full h-full object-cover" style="position:absolute; inset:0" onerror="handleThumbError(this, ${f.file_type==='video'})">
+      <img src="${thumb}" data-original="${thumb}" class="w-full h-full object-cover block" onerror="handleThumbError(this, ${f.file_type==='video'})">
       ${f.show_hide==='hide' ? `<span class="absolute bottom-1 left-1 text-[9px] bg-black bg-opacity-70 text-white px-1.5 py-0.5 rounded-full z-10"><i class="fa-solid fa-eye-slash"></i></span>` : ''}
       ${f.file_type==='video' ? `<span class="absolute top-1 right-1 text-[9px] bg-black bg-opacity-70 text-white px-1 py-0.5 rounded z-10"><i class="fa-solid fa-video"></i></span>` : ''}
       <button onclick="event.preventDefault(); event.stopPropagation(); openLightboxFromList('manage', ${i})" title="ดูตัวอย่าง" class="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-black bg-opacity-60 text-white text-[10px] flex items-center justify-center hover:bg-opacity-90 z-10">
@@ -1094,6 +1102,12 @@ async function bulkDelete(){
   toast(`ลบ ${ids.length} ไฟล์ออกจากระบบแล้ว`);
   await refreshData();
 }
+function showProfilePic(url){
+  if(!url) return;
+  document.getElementById('profile-viewer-img').src = url;
+  document.getElementById('profile-viewer').style.display = 'flex';
+}
+
 // ---- user management (bulk) ----
 async function loadAllUsers(){
   const box = document.getElementById('all-users-list');
@@ -1103,7 +1117,7 @@ async function loadAllUsers(){
   box.innerHTML = (res.users||[]).map(u=>`
     <label class="flex items-center gap-2 px-3 py-2 border-b last:border-b-0 cursor-pointer hover:bg-gray-50">
       <input type="checkbox" class="user-check w-4 h-4" value="${u.line_user_id}">
-      <img src="${u.picture_url||''}" class="w-7 h-7 rounded-full bg-gray-100" onerror="this.style.visibility='hidden'">
+      <img src="${u.picture_url||''}" class="w-7 h-7 rounded-full bg-gray-100 cursor-zoom-in" onclick="event.preventDefault(); event.stopPropagation(); showProfilePic('${u.picture_url||''}')" onerror="this.style.visibility='hidden'">
       <span class="flex-1 truncate text-gray-700">${u.display_name || u.line_user_id}</span>
       <span class="text-[10px] px-2 py-0.5 rounded-full ${u.role==='admin'?'bg-black text-white':'border border-gray-300 text-gray-500'}">${u.role||'-'}</span>
     </label>`).join('') || `<div class="p-3 text-gray-300">ยังไม่มีผู้ใช้</div>`;
