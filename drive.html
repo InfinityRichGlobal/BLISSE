@@ -54,6 +54,7 @@
       </div>
     </div>
     <div id="admin-buttons" class="hidden flex flex-wrap justify-end items-center gap-1 md:gap-1.5 mt-2">
+      <button id="viewas-btn" onclick="toggleViewAsUser()" title="ดูในมุมมองสมาชิก" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-user"></i></button>
       <button id="shortcut-toggle-btn" onclick="toggleAdminShortcuts()" title="เปิด/ปิดปุ่มลัดบนการ์ด (ตา/ลบ)" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-eye"></i></button>
       <button onclick="openPanel('upload')" title="อัปโหลด" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-upload"></i></button>
       <button onclick="openPanel('sync')" title="ซิงค์" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-rotate"></i></button>
@@ -138,6 +139,11 @@
   </div>
 </div>
 
+<!-- VIEW AS USER BANNER -->
+<div id="viewas-banner" class="fixed top-0 left-0 right-0 z-[90] hidden bg-black text-white text-xs md:text-sm text-center py-2.5 cursor-pointer" onclick="toggleViewAsUser()">
+  <i class="fa-solid fa-user mr-1.5"></i>กำลังดูในมุมมองสมาชิก — แตะที่นี่เพื่อกลับเป็นแอดมิน
+</div>
+
 <!-- PROFILE PICTURE VIEWER -->
 <div id="profile-viewer" class="fixed inset-0 z-[125] hidden items-center justify-center bg-black bg-opacity-70 px-8" onclick="this.style.display='none'">
   <img id="profile-viewer-img" src="" class="max-w-[280px] max-h-[280px] rounded-3xl shadow-2xl object-cover">
@@ -182,7 +188,7 @@ function handleThumbError(imgEl, isVideo){
 let STATE = {
   uid: null, profile: null, role: null, approved: false,
   config: {}, tags: [], files: [], showCounts: false,
-  activeType: 'all', activeTags: new Set(), untaggedOnly: false, hiddenOnly: false, currentSet: [], lightboxIndex: 0
+  activeType: 'all', activeTags: new Set(), untaggedOnly: false, hiddenOnly: false, viewAsUser: false, currentSet: [], lightboxIndex: 0
 };
 
 // ---------------- LIFF BOOTSTRAP ----------------
@@ -265,12 +271,13 @@ async function api(action, payload, isPost){
 // ---------------- FILTERS ----------------
 function renderFilters(){
   const counts = computeCounts();
+  const showCnt = effectiveShowCounts();
 
-  // แถวบนสุด: ฟังก์ชันเฉพาะแอดมิน (ไม่มี tag / ไฟล์ที่ซ่อนอยู่)
+  // แถวบนสุด: ฟังก์ชันเฉพาะแอดมิน (ไม่มี tag / ไฟล์ที่ซ่อนอยู่) — ซ่อนในโหมด view as user
   const adminBar = document.getElementById('admin-filters');
-  if(STATE.role === 'admin'){
-    const untaggedStr = STATE.showCounts ? ` (${counts.untagged})` : '';
-    const hiddenStr = STATE.showCounts ? ` (${counts.hidden})` : '';
+  if(isAdminView()){
+    const untaggedStr = showCnt ? ` (${counts.untagged})` : '';
+    const hiddenStr = showCnt ? ` (${counts.hidden})` : '';
     adminBar.innerHTML = `
       <button onclick="toggleUntagged()" class="pill px-3 py-1 rounded-full text-[11px] md:text-xs border ${STATE.untaggedOnly?'active':'border-gray-200 text-gray-500'}"><i class="fa-solid fa-tag mr-1"></i>ไม่มี tag${untaggedStr}</button>
       <button onclick="toggleHidden()" class="pill px-3 py-1 rounded-full text-[11px] md:text-xs border ${STATE.hiddenOnly?'active':'border-gray-200 text-gray-500'}"><i class="fa-solid fa-eye-slash mr-1"></i>ซ่อนอยู่${hiddenStr}</button>`;
@@ -282,23 +289,23 @@ function renderFilters(){
   typeBar.innerHTML = ['all','image','video'].map(t=>{
     const label = t==='all' ? 'ทั้งหมด' : (t==='image'?'<i class="fa-solid fa-image mr-1"></i>ภาพ':'<i class="fa-solid fa-video mr-1"></i>วีดีโอ');
     const n = counts.type[t] || 0;
-    const countStr = STATE.showCounts ? ` (${n})` : '';
+    const countStr = showCnt ? ` (${n})` : '';
     return `<button onclick="setType('${t}')" class="pill px-4 py-1.5 rounded-full text-xs md:text-sm border ${STATE.activeType===t?'active':'border-gray-200 text-gray-600'}">${label}${countStr}</button>`;
   }).join('');
 
   const tagBar = document.getElementById('tag-filters');
-  tagBar.innerHTML = STATE.tags.map(t=>{
+  tagBar.innerHTML = visibleTags().map(t=>{
     const n = counts.tags[t.tag_name] || 0;
     const active = STATE.activeTags.has(t.tag_name);
-    const countStr = STATE.showCounts ? ` (${n})` : '';
+    const countStr = showCnt ? ` (${n})` : '';
     return `<button onclick="toggleTag('${t.tag_name}')" class="pill px-3 py-1 rounded-full text-[11px] md:text-xs border ${active?'active':'border-gray-200 text-gray-500'}">#${t.tag_name}${countStr}</button>`;
   }).join('');
 }
 
 function computeCounts(){
-  // ชั้นฐาน: โหมด "ซ่อนอยู่" กรองก่อนทุกอย่าง — ทุกตัวเลขบนจอจะนับจากไฟล์ที่ซ่อนเท่านั้น
-  // ทำให้แอดมินเห็นทันทีว่าแต่ละ tag/อัลบั้ม มีไฟล์ซ่อนอยู่กี่ไฟล์
-  const base = STATE.hiddenOnly ? STATE.files.filter(f=>f.show_hide==='hide') : STATE.files;
+  // ชั้นฐาน: มุมมองปัจจุบัน (แอดมินเต็ม หรือจำลอง user) + โหมด "ซ่อนอยู่" กรองก่อนทุกอย่าง
+  let base = visibleFiles();
+  if(STATE.hiddenOnly) base = base.filter(f=>f.show_hide==='hide');
 
   // cascading: type counts respect active tags; tag counts respect active type
   const byTag = base.filter(f => {
@@ -312,7 +319,7 @@ function computeCounts(){
     video: byTag.filter(f=>f.file_type==='video').length };
 
   const tagCounts = {};
-  STATE.tags.forEach(t=>{
+  visibleTags().forEach(t=>{
     tagCounts[t.tag_name] = byType.filter(f=>fileTags(f).includes(t.tag_name)).length;
   });
   const untaggedCount = byType.filter(f=>fileTags(f).length===0).length;
@@ -1171,6 +1178,49 @@ async function toggleAdminShortcuts(){
     return;
   }
   toast(newVal==='TRUE' ? 'เปิดปุ่มลัดบนการ์ดแล้ว' : 'ปิดปุ่มลัดบนการ์ดแล้ว');
+}
+
+// ---------------- VIEW AS USER (จำลองมุมมองสมาชิก ฝั่ง client เท่านั้น role จริงไม่เปลี่ยน) ----------------
+function isAdminView(){ return STATE.role==='admin' && !STATE.viewAsUser; }
+
+function visibleFiles(){
+  if(isAdminView()) return STATE.files;
+  // จำลองกฎเดียวกับที่ backend กรองให้ user จริง: เฉพาะ show + ไม่มี tag เฉพาะแอดมิน
+  const adminTagNames = STATE.tags.filter(t=>t.visibility==='admin').map(t=>t.tag_name);
+  return STATE.files.filter(f=>{
+    if(f.show_hide!=='show') return false;
+    return !fileTags(f).some(t=>adminTagNames.includes(t));
+  });
+}
+function visibleTags(){
+  if(isAdminView()) return STATE.tags;
+  return STATE.tags.filter(t=>t.visibility!=='admin');
+}
+function effectiveShowCounts(){
+  if(isAdminView()) return STATE.showCounts;
+  return String(STATE.config.count_visibility)==='user'; // กฎเดียวกับ user จริง
+}
+
+function toggleViewAsUser(){
+  STATE.viewAsUser = !STATE.viewAsUser;
+  const banner = document.getElementById('viewas-banner');
+  const adminBtns = document.getElementById('admin-buttons');
+  if(STATE.viewAsUser){
+    banner.style.display = 'block';
+    adminBtns.style.display = 'none';
+    document.body.style.paddingTop = '38px'; // เว้นที่ให้แถบเตือน
+    // ออกจากโหมด filter เฉพาะแอดมินที่ user ไม่มี
+    STATE.untaggedOnly = false; STATE.hiddenOnly = false;
+    closeLightbox(); closePanel();
+    toast('เข้าสู่มุมมองสมาชิก');
+  } else {
+    banner.style.display = 'none';
+    adminBtns.style.display = 'flex';
+    document.body.style.paddingTop = '';
+    toast('กลับเป็นแอดมินแล้ว');
+  }
+  renderFilters();
+  applyFilters();
 }
 
 function showProfilePic(url){
