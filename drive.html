@@ -606,7 +606,7 @@ function openPanel(type){
     syncSelectedTags = new Set();
     title.textContent = 'ซิงค์จาก Drive';
     body.innerHTML = `
-      <textarea id="sync-input" rows="4" placeholder="วาง Folder ID หรือ Full Link ทีละบรรทัด" class="mb-3 w-full border rounded-xl px-3 py-2 text-sm"></textarea>
+      <textarea id="sync-input" rows="4" placeholder="วางลิงก์/ID ได้ทั้งโฟลเดอร์และไฟล์เดี่ยว ปนกันได้ ทีละบรรทัด" class="mb-3 w-full border rounded-xl px-3 py-2 text-sm"></textarea>
       <div class="mb-3 border rounded-xl p-3">
         <p class="text-xs font-medium mb-2">ติด Tag ให้ไฟล์ที่ sync มาในรอบนี้ (เลือกได้ ไม่บังคับ)</p>
         <div id="sync-tag-picker" class="flex flex-wrap gap-1.5 mb-2"></div>
@@ -894,7 +894,7 @@ async function startSync(){
     if(res.folderErrors && res.folderErrors.length) folderErrors = res.folderErrors;
 
     if(!reportShown && res.folderReport && res.folderReport.length){
-      reportBox.innerHTML = res.folderReport.map(r=>`<div><i class="fa-solid fa-folder mr-1"></i>${r}</div>`).join('');
+      reportBox.innerHTML = res.folderReport.map(r=>`<div>${r}</div>`).join('');
       reportShown = true;
     }
 
