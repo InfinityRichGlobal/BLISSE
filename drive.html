@@ -60,6 +60,11 @@
       <button onclick="openPanel('sync')" title="ซิงค์" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-rotate"></i></button>
       <button onclick="openPanel('manage')" title="จัดการ" class="w-9 h-9 md:w-10 md:h-10 rounded-xl text-gray-500 hover:text-black hover:bg-gray-100 flex items-center justify-center"><i class="fa-solid fa-sliders"></i></button>
     </div>
+    <div id="viewas-banner" class="hidden justify-end mt-2">
+      <button onclick="toggleViewAsUser()" class="bg-black text-white text-[11px] md:text-xs px-4 py-2 rounded-xl">
+        <i class="fa-solid fa-user mr-1.5"></i>กำลังดูในมุมมองสมาชิก — แตะเพื่อกลับเป็นแอดมิน
+      </button>
+    </div>
   </div>
 
   <!-- FILTER BAR -->
@@ -139,11 +144,6 @@
   </div>
 </div>
 
-<!-- VIEW AS USER BANNER -->
-<div id="viewas-banner" class="fixed top-0 left-0 right-0 z-[90] hidden bg-black text-white text-xs md:text-sm text-center py-2.5 cursor-pointer" onclick="toggleViewAsUser()">
-  <i class="fa-solid fa-user mr-1.5"></i>กำลังดูในมุมมองสมาชิก — แตะที่นี่เพื่อกลับเป็นแอดมิน
-</div>
-
 <!-- PROFILE PICTURE VIEWER -->
 <div id="profile-viewer" class="fixed inset-0 z-[125] hidden items-center justify-center bg-black bg-opacity-70 px-8" onclick="this.style.display='none'">
   <img id="profile-viewer-img" src="" class="max-w-[280px] max-h-[280px] rounded-3xl shadow-2xl object-cover">
@@ -169,12 +169,21 @@ const FALLBACK_LOADING = "data:image/svg+xml;utf8," + encodeURIComponent(
 // Drive อาจใช้เวลาสักครู่กว่าจะสร้างลิงก์พรีวิวให้ไฟล์ที่เพิ่งอัปโหลด/ซิงค์มา
 // (เกิดได้ทั้งภาพและวีดีโอ) — ลอง retry อัตโนมัติก่อนค่อย fallback เป็นไอคอนถาวร
 function handleThumbError(imgEl, isVideo){
+  const original = imgEl.dataset.original || '';
+  // ภาพบางชนิด (psd/ai) แสดงผ่าน lh3 ไม่ได้ แต่ Drive สร้าง thumbnail ให้ได้ — สลับ endpoint ก่อน
+  if(!isVideo && !imgEl.dataset.altTried && original.includes('lh3.googleusercontent')){
+    imgEl.dataset.altTried = '1';
+    const idMatch = original.match(/\/d\/([-\w]+)/);
+    if(idMatch){
+      imgEl.src = `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w400`;
+      return;
+    }
+  }
   const retryCount = parseInt(imgEl.dataset.retry || '0');
   if(retryCount < 3){
     imgEl.dataset.retry = retryCount + 1;
     imgEl.src = isVideo ? FALLBACK_VIDEO_PROCESSING : FALLBACK_LOADING;
     setTimeout(()=>{
-      const original = imgEl.dataset.original;
       if(!original) return;
       const sep = original.includes('?') ? '&' : '?';
       imgEl.src = original + sep + '_r=' + Date.now(); // cache-bust ลองโหลดใหม่
@@ -286,8 +295,8 @@ function renderFilters(){
   }
 
   const typeBar = document.getElementById('type-filters');
-  typeBar.innerHTML = ['all','image','video'].map(t=>{
-    const label = t==='all' ? 'ทั้งหมด' : (t==='image'?'<i class="fa-solid fa-image mr-1"></i>ภาพ':'<i class="fa-solid fa-video mr-1"></i>วีดีโอ');
+  typeBar.innerHTML = ['all','image','video','doc'].map(t=>{
+    const label = t==='all' ? 'ทั้งหมด' : (t==='image'?'<i class="fa-solid fa-image mr-1"></i>ภาพ' : t==='video'?'<i class="fa-solid fa-video mr-1"></i>วีดีโอ' : '<i class="fa-solid fa-file mr-1"></i>ไฟล์');
     const n = counts.type[t] || 0;
     const countStr = showCnt ? ` (${n})` : '';
     return `<button onclick="setType('${t}')" class="pill px-4 py-1.5 rounded-full text-xs md:text-sm border ${STATE.activeType===t?'active':'border-gray-200 text-gray-600'}">${label}${countStr}</button>`;
@@ -316,7 +325,8 @@ function computeCounts(){
 
   const typeCounts = { all: byTag.length,
     image: byTag.filter(f=>f.file_type==='image').length,
-    video: byTag.filter(f=>f.file_type==='video').length };
+    video: byTag.filter(f=>f.file_type==='video').length,
+    doc: byTag.filter(f=>f.file_type==='doc').length };
 
   const tagCounts = {};
   visibleTags().forEach(t=>{
@@ -349,7 +359,7 @@ function toggleHidden(){
 }
 
 function applyFilters(){
-  let list = STATE.files;
+  let list = visibleFiles(); // เคารพโหมด view as user (ซ่อน hide + tag เฉพาะแอดมิน)
   if(STATE.hiddenOnly) list = list.filter(f=>f.show_hide==='hide');
   if(STATE.activeType !== 'all') list = list.filter(f=>f.file_type===STATE.activeType);
   if(STATE.untaggedOnly) list = list.filter(f=>fileTags(f).length===0);
@@ -380,8 +390,9 @@ function renderThumbGrid(containerId, listKey, list){
     const hidden = f.show_hide==='hide';
     const shortcutsEnabled = String(STATE.config.show_admin_shortcuts).toLowerCase() !== 'false'; // default เปิด ถ้าไม่ได้ตั้งค่าไว้
     const hiddenBadge = hidden ? `<span class="absolute bottom-2 left-2 text-[10px] bg-black bg-opacity-60 text-white px-2 py-0.5 rounded-full z-10"><i class="fa-solid fa-eye-slash mr-1"></i>ซ่อน</span>` : '';
-    const videoBadge = f.file_type==='video' ? `<span class="absolute top-1.5 right-1.5 text-[10px] bg-black bg-opacity-60 text-white w-5 h-5 rounded-full flex items-center justify-center z-10 pointer-events-none"><i class="fa-solid fa-video"></i></span>` : '';
-    const adminShortcuts = (STATE.role==='admin' && shortcutsEnabled) ? `
+    const videoBadge = f.file_type==='video' ? `<span class="absolute top-1.5 right-1.5 text-[10px] bg-black bg-opacity-60 text-white w-5 h-5 rounded-full flex items-center justify-center z-10 pointer-events-none"><i class="fa-solid fa-video"></i></span>` :
+      (f.file_type==='doc' ? `<span class="absolute top-1.5 right-1.5 text-[10px] bg-black bg-opacity-60 text-white w-5 h-5 rounded-full flex items-center justify-center z-10 pointer-events-none"><i class="fa-solid fa-file"></i></span>` : '');
+    const adminShortcuts = (isAdminView() && shortcutsEnabled) ? `
       <button onclick="event.stopPropagation(); quickToggleShow('${f.file_id}','${hidden?'show':'hide'}')" title="${hidden?'เปิดตา':'ปิดตา'}" class="absolute top-1 left-1 w-6 h-6 rounded-full bg-black bg-opacity-50 text-white text-[10px] flex items-center justify-center hover:bg-opacity-80 z-20">
         <i class="fa-solid ${hidden?'fa-eye-slash':'fa-eye'}"></i>
       </button>
@@ -489,7 +500,7 @@ function renderLightbox(){
 
   const adminBar = document.getElementById('lb-admin-bar');
   if(adminBar){
-    if(STATE.role==='admin'){
+    if(isAdminView()){
       const hidden = f.show_hide==='hide';
       adminBar.style.display = 'flex';
       adminBar.innerHTML = `
@@ -586,7 +597,7 @@ function openPanel(type){
     uploadSelectedTags = new Set();
     title.textContent = 'อัปโหลดไฟล์';
     body.innerHTML = `
-      <input type="file" id="upload-input" multiple accept="image/*,video/*" class="mb-3 block w-full text-sm" onchange="addFilesToQueue(this.files)">
+      <input type="file" id="upload-input" multiple accept="image/*,video/*,.pdf,.psd,.ai,application/pdf" class="mb-3 block w-full text-sm" onchange="addFilesToQueue(this.files)">
       <div class="mb-3 border rounded-xl p-3">
         <p class="text-xs font-medium mb-2">ติด Tag ให้ไฟล์ที่จะอัปโหลด (เลือกได้ ไม่บังคับ)</p>
         <div id="upload-tag-picker" class="flex flex-wrap gap-1.5 mb-2"></div>
@@ -787,7 +798,7 @@ async function startUpload(){
       item.status='success'; success++;
       uploadedFilesForGrid.push({
         file_id: res.fileId, file_name: item.file.name,
-        file_type: item.file.type.startsWith('video') ? 'video' : 'image',
+        file_type: detectFileTypeClient(item.file.type, item.file.name),
         file_url: res.fileUrl, tags: tags, show_hide: 'show'
       });
       document.getElementById('upload-thumbs-wrap').classList.remove('hidden');
@@ -1030,8 +1041,8 @@ async function renderManagePanel(body){
 
 function renderManageFilters(){
   const typeBox = document.getElementById('manage-type-filters');
-  typeBox.innerHTML = ['all','image','video'].map(t=>{
-    const label = t==='all'?'ทั้งหมด':(t==='image'?'<i class="fa-solid fa-image mr-1"></i>ภาพ':'<i class="fa-solid fa-video mr-1"></i>วีดีโอ');
+  typeBox.innerHTML = ['all','image','video','doc'].map(t=>{
+    const label = t==='all'?'ทั้งหมด':(t==='image'?'<i class="fa-solid fa-image mr-1"></i>ภาพ' : t==='video'?'<i class="fa-solid fa-video mr-1"></i>วีดีโอ' : '<i class="fa-solid fa-file mr-1"></i>ไฟล์');
     return `<button onclick="setManageType('${t}')" class="pill px-3 py-1 rounded-full text-[11px] border ${MANAGE.type===t?'active':'border-gray-200 text-gray-500'}">${label}</button>`;
   }).join('');
   const tagBox = document.getElementById('manage-tag-filters');
@@ -1181,6 +1192,17 @@ async function toggleAdminShortcuts(){
 }
 
 // ---------------- VIEW AS USER (จำลองมุมมองสมาชิก ฝั่ง client เท่านั้น role จริงไม่เปลี่ยน) ----------------
+// ตรวจประเภทไฟล์ฝั่ง client — ตรรกะเดียวกับ backend (เช็คนามสกุลก่อน mime เพราะ .ai บางไฟล์ mime เป็น pdf)
+function detectFileTypeClient(mime, name){
+  mime = String(mime||''); name = String(name||'').toLowerCase();
+  if(mime.startsWith('video')) return 'video';
+  if(name.endsWith('.psd') || name.endsWith('.ai')) return 'image';
+  if(name.endsWith('.pdf') || mime === 'application/pdf') return 'doc';
+  if(mime.startsWith('image')) return 'image';
+  if(['application/postscript','application/illustrator','application/x-photoshop','application/photoshop'].includes(mime)) return 'image';
+  return 'doc'; // ไฟล์แปลกๆ ที่ผ่าน accept มาได้ จัดเป็น doc ไว้ก่อน (backend จะตัดสินอีกชั้น)
+}
+
 function isAdminView(){ return STATE.role==='admin' && !STATE.viewAsUser; }
 
 function visibleFiles(){
@@ -1206,9 +1228,8 @@ function toggleViewAsUser(){
   const banner = document.getElementById('viewas-banner');
   const adminBtns = document.getElementById('admin-buttons');
   if(STATE.viewAsUser){
-    banner.style.display = 'block';
     adminBtns.style.display = 'none';
-    document.body.style.paddingTop = '38px'; // เว้นที่ให้แถบเตือน
+    banner.style.display = 'flex'; // แสดงแทนที่แถวปุ่มแอดมินตำแหน่งเดิม
     // ออกจากโหมด filter เฉพาะแอดมินที่ user ไม่มี
     STATE.untaggedOnly = false; STATE.hiddenOnly = false;
     closeLightbox(); closePanel();
@@ -1216,7 +1237,6 @@ function toggleViewAsUser(){
   } else {
     banner.style.display = 'none';
     adminBtns.style.display = 'flex';
-    document.body.style.paddingTop = '';
     toast('กลับเป็นแอดมินแล้ว');
   }
   renderFilters();
