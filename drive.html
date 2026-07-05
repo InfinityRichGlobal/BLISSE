@@ -12,7 +12,6 @@
   :root{
     --bg:#ffffff; --text:#171717; --border:#f0f0f0; --thumb-h:160px;
   }
-  
   body{ font-family:'Prompt',sans-serif; background:var(--bg); color:var(--text); }
   .card-clean{ transition:all .3s ease; border:1px solid var(--border); }
   .card-clean:hover{ transform:translateY(-3px); box-shadow:0 12px 30px -8px rgba(0,0,0,.08); }
@@ -89,6 +88,7 @@
   <button onclick="navLightbox(1)" class="absolute right-2 md:right-8 top-1/2 -translate-y-1/2 text-white text-2xl w-12 h-12 flex items-center justify-center z-20"><i class="fa-solid fa-chevron-right"></i></button>
   <div id="lightbox-content" class="max-w-[90%] flex flex-col items-center"></div>
   <div class="absolute bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 w-[94%] md:w-auto max-w-[95vw] z-20">
+    <div id="lb-filename" class="text-center text-white text-[11px] md:text-xs mb-1.5 truncate px-4 opacity-80"></div>
     <div id="lb-actionbar" class="flex flex-wrap justify-center items-center gap-1 bg-black bg-opacity-45 backdrop-blur-md rounded-2xl px-2 py-2 border border-white border-opacity-10">
       <a id="lb-download" href="#" class="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs md:text-sm rounded-xl hover:bg-white hover:bg-opacity-10 transition-colors"><i class="fa-solid fa-download"></i><span class="hidden sm:inline">ดาวน์โหลด</span></a>
       <a id="lb-drive" href="#" target="_blank" class="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs md:text-sm rounded-xl hover:bg-white hover:bg-opacity-10 transition-colors"><i class="fa-brands fa-google-drive"></i><span class="hidden sm:inline">Drive</span></a>
@@ -430,6 +430,8 @@ function renderLightbox(){
   }
   document.getElementById('lb-download').href = `https://drive.google.com/uc?export=download&id=${f.file_id}`;
   document.getElementById('lb-drive').href = f.file_url;
+  const fnEl = document.getElementById('lb-filename');
+  if(fnEl) fnEl.textContent = f.file_name || '';
 
   const adminBar = document.getElementById('lb-admin-bar');
   if(adminBar){
@@ -888,6 +890,32 @@ async function renderManagePanel(body){
     </div>
     <hr class="my-4">
 
+    <div class="mb-4">
+      <h4 class="text-sm font-medium mb-2"><i class="fa-solid fa-users mr-1"></i>ผู้ใช้ทั้งหมดในระบบ</h4>
+      <div class="flex gap-2 mb-2">
+        <button onclick="selectAllUsers(true)" class="text-xs underline">เลือกทั้งหมด</button>
+        <button onclick="selectAllUsers(false)" class="text-xs underline">ยกเลิกเลือก</button>
+      </div>
+      <div id="all-users-list" class="border rounded-xl max-h-48 overflow-y-auto mb-2 text-xs text-gray-400"><div class="p-3">กำลังโหลด...</div></div>
+      <div class="flex gap-2">
+        <button onclick="bulkSetUserRole('user')" class="flex-1 text-xs border rounded-lg py-1.5">ตั้งเป็นสมาชิก</button>
+        <button onclick="bulkSetUserRole('admin')" class="flex-1 text-xs border rounded-lg py-1.5">ตั้งเป็นแอดมิน</button>
+        <button onclick="bulkRemoveUsers()" class="flex-1 text-xs border border-red-200 text-red-500 rounded-lg py-1.5">ถอนสิทธิ์</button>
+      </div>
+    </div>
+    <hr class="my-4">
+
+    <div class="mb-4">
+      <h4 class="text-sm font-medium mb-2"><i class="fa-solid fa-tags mr-1"></i>จัดการสิทธิ์ Tag ในระบบ</h4>
+      <p class="text-[10px] text-gray-400 mb-2">tag ที่ตั้ง "เฉพาะแอดมิน" — ไฟล์ที่ติด tag นั้นจะถูกซ่อนจาก user ทั่วไปทั้งหมด</p>
+      <div id="tag-visibility-list" class="border rounded-xl max-h-40 overflow-y-auto mb-2 text-xs"></div>
+      <div class="flex gap-2">
+        <button onclick="bulkSetTagVisibility('admin')" class="flex-1 text-xs border rounded-lg py-1.5"><i class="fa-solid fa-lock mr-1"></i>เฉพาะแอดมิน</button>
+        <button onclick="bulkSetTagVisibility('')" class="flex-1 text-xs border rounded-lg py-1.5"><i class="fa-solid fa-lock-open mr-1"></i>ทุกคนเห็น</button>
+      </div>
+    </div>
+    <hr class="my-4">
+
     <h4 class="text-sm font-medium mb-2">กรองไฟล์เพื่อจัดการ</h4>
     <div id="manage-type-filters" class="flex flex-wrap gap-1.5 mb-2"></div>
     <div id="manage-tag-filters" class="flex flex-wrap gap-1.5 mb-3"></div>
@@ -925,6 +953,9 @@ async function renderManagePanel(body){
   renderManageFilters();
   renderManageGrid();
   renderTagPicker();
+
+  renderTagVisibilityList();
+  loadAllUsers();
 
   const pending = await api('pendingUsers', { uid: STATE.uid });
   const list = document.getElementById('pending-list');
@@ -969,9 +1000,10 @@ function toggleManageTag(name){
 function renderManageGrid(){
   const grid = document.getElementById('manage-grid');
   const files = manageFilteredFiles();
+  LISTS['manage'] = files; // ให้ lightbox เปิดจากหน้าจัดการได้
   const countEl = document.getElementById('manage-count');
   if(countEl) countEl.textContent = `แสดง ${files.length} ไฟล์`;
-  grid.innerHTML = files.map(f=>{
+  grid.innerHTML = files.map((f,i)=>{
     const thumb = f.file_type==='image'
       ? `https://lh3.googleusercontent.com/d/${f.file_id}`
       : `https://drive.google.com/thumbnail?id=${f.file_id}&sz=w200`;
@@ -979,8 +1011,11 @@ function renderManageGrid(){
     <label class="relative block rounded-lg overflow-hidden border border-gray-200 cursor-pointer group bg-gray-50" style="aspect-ratio:1/1; min-height:70px">
       <input type="checkbox" class="file-check absolute top-1 left-1 z-10 w-4 h-4" value="${f.file_id}">
       <img src="${thumb}" data-original="${thumb}" class="w-full h-full object-cover" style="position:absolute; inset:0" onerror="handleThumbError(this, ${f.file_type==='video'})">
-      ${f.show_hide==='hide' ? `<span class="absolute bottom-1 right-1 text-[9px] bg-black bg-opacity-70 text-white px-1.5 py-0.5 rounded-full z-10"><i class="fa-solid fa-eye-slash"></i></span>` : ''}
+      ${f.show_hide==='hide' ? `<span class="absolute bottom-1 left-1 text-[9px] bg-black bg-opacity-70 text-white px-1.5 py-0.5 rounded-full z-10"><i class="fa-solid fa-eye-slash"></i></span>` : ''}
       ${f.file_type==='video' ? `<span class="absolute top-1 right-1 text-[9px] bg-black bg-opacity-70 text-white px-1 py-0.5 rounded z-10"><i class="fa-solid fa-video"></i></span>` : ''}
+      <button onclick="event.preventDefault(); event.stopPropagation(); openLightboxFromList('manage', ${i})" title="ดูตัวอย่าง" class="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-black bg-opacity-60 text-white text-[10px] flex items-center justify-center hover:bg-opacity-90 z-10">
+        <i class="fa-solid fa-expand"></i>
+      </button>
     </label>`;
   }).join('') || `<div class="col-span-4 text-center text-xs text-gray-300 py-6">ไม่พบไฟล์ตามตัวกรอง</div>`;
 }
@@ -1059,6 +1094,74 @@ async function bulkDelete(){
   toast(`ลบ ${ids.length} ไฟล์ออกจากระบบแล้ว`);
   await refreshData();
 }
+// ---- user management (bulk) ----
+async function loadAllUsers(){
+  const box = document.getElementById('all-users-list');
+  if(!box) return;
+  const res = await api('listUsers', {});
+  if(res.error){ box.innerHTML = `<div class="p-3 text-red-500">${res.error}</div>`; return; }
+  box.innerHTML = (res.users||[]).map(u=>`
+    <label class="flex items-center gap-2 px-3 py-2 border-b last:border-b-0 cursor-pointer hover:bg-gray-50">
+      <input type="checkbox" class="user-check w-4 h-4" value="${u.line_user_id}">
+      <img src="${u.picture_url||''}" class="w-7 h-7 rounded-full bg-gray-100" onerror="this.style.visibility='hidden'">
+      <span class="flex-1 truncate text-gray-700">${u.display_name || u.line_user_id}</span>
+      <span class="text-[10px] px-2 py-0.5 rounded-full ${u.role==='admin'?'bg-black text-white':'border border-gray-300 text-gray-500'}">${u.role||'-'}</span>
+    </label>`).join('') || `<div class="p-3 text-gray-300">ยังไม่มีผู้ใช้</div>`;
+}
+function selectAllUsers(state){
+  document.querySelectorAll('.user-check').forEach(c=>c.checked=state);
+}
+function getSelectedUserIds(){
+  return Array.from(document.querySelectorAll('.user-check:checked')).map(c=>c.value);
+}
+async function bulkSetUserRole(role){
+  const ids = getSelectedUserIds();
+  if(ids.length===0){ toast('ยังไม่ได้เลือกผู้ใช้','err'); return; }
+  const res = await api('bulkUpdateUsers', { targetUids: ids, role });
+  if(res.error){ toast('ปรับสิทธิ์ไม่สำเร็จ: '+res.error,'err'); return; }
+  let msg = `ปรับสิทธิ์ ${res.updated} คนเป็น ${role} แล้ว`;
+  if(res.skippedSelf>0) msg += ' (ข้ามตัวเอง — ห้ามลดสิทธิ์ตัวเอง)';
+  toast(msg);
+  loadAllUsers();
+}
+async function bulkRemoveUsers(){
+  const ids = getSelectedUserIds();
+  if(ids.length===0){ toast('ยังไม่ได้เลือกผู้ใช้','err'); return; }
+  const ok = await showConfirm(`ถอนสิทธิ์ ${ids.length} คนออกจากระบบ? (พวกเขาจะเข้าเว็บไม่ได้จนกว่าจะอนุมัติใหม่)`);
+  if(!ok) return;
+  const res = await api('bulkUpdateUsers', { targetUids: ids, remove: true });
+  if(res.error){ toast('ถอนสิทธิ์ไม่สำเร็จ: '+res.error,'err'); return; }
+  let msg = `ถอนสิทธิ์ ${res.removed} คนแล้ว`;
+  if(res.skippedSelf>0) msg += ' (ข้ามตัวเอง — ห้ามถอนสิทธิ์ตัวเอง)';
+  toast(msg);
+  loadAllUsers();
+}
+
+// ---- tag visibility management (bulk) ----
+function renderTagVisibilityList(){
+  const box = document.getElementById('tag-visibility-list');
+  if(!box) return;
+  box.innerHTML = STATE.tags.map(t=>`
+    <label class="flex items-center gap-2 px-3 py-2 border-b last:border-b-0 cursor-pointer hover:bg-gray-50">
+      <input type="checkbox" class="tagvis-check w-4 h-4" value="${t.tag_name}">
+      <span class="flex-1 truncate text-gray-700">#${t.tag_name}</span>
+      <span class="text-[10px] px-2 py-0.5 rounded-full ${t.visibility==='admin'?'bg-black text-white':'border border-gray-300 text-gray-500'}">
+        ${t.visibility==='admin'?'<i class="fa-solid fa-lock mr-0.5"></i>เฉพาะแอดมิน':'<i class="fa-solid fa-lock-open mr-0.5"></i>ทุกคน'}
+      </span>
+    </label>`).join('') || `<div class="p-3 text-gray-300">ยังไม่มี tag ในระบบ</div>`;
+}
+async function bulkSetTagVisibility(visibility){
+  const names = Array.from(document.querySelectorAll('.tagvis-check:checked')).map(c=>c.value);
+  if(names.length===0){ toast('ยังไม่ได้เลือก tag','err'); return; }
+  const res = await api('bulkUpdateTags', { tagNames: names, visibility });
+  if(res.error){ toast('ปรับสิทธิ์ tag ไม่สำเร็จ: '+res.error,'err'); return; }
+  toast(`ปรับสิทธิ์ ${res.updated} tag แล้ว`);
+  // อัปเดต state ในเครื่องให้ตรง แล้ว re-render
+  STATE.tags.forEach(t=>{ if(names.includes(t.tag_name)) t.visibility = visibility; });
+  renderTagVisibilityList();
+  renderTagPicker(); renderManageFilters();
+}
+
 async function approveUser(uid, name, pic, role){
   const res = await api('approveUser', { targetUid: uid, displayName: name, pictureUrl: pic, role });
   if(res.error){ toast('อนุมัติไม่สำเร็จ: ' + res.error, 'err'); return; }
