@@ -376,6 +376,18 @@ function renderGallery(list){
   renderThumbGrid('gallery', 'gallery', list);
 }
 
+// badge บอกชนิดไฟล์บนทรัมเนล: วีดีโอ / Ps / Ai / PDF (สไตล์เดียวกันหมด)
+function fileBadge(f, small){
+  const sz = small ? 'w-5 h-5 text-[8px] top-1 right-1' : 'w-5 h-5 text-[10px] top-1.5 right-1.5';
+  const base = `absolute ${sz} bg-black bg-opacity-60 text-white rounded-full flex items-center justify-center z-10 pointer-events-none`;
+  const name = String(f.file_name||'').toLowerCase();
+  if(f.file_type==='video') return `<span class="${base}"><i class="fa-solid fa-video"></i></span>`;
+  if(name.endsWith('.psd')) return `<span class="${base} font-medium" style="font-size:${small?'7px':'9px'}">Ps</span>`;
+  if(name.endsWith('.ai'))  return `<span class="${base} font-medium" style="font-size:${small?'7px':'9px'}">Ai</span>`;
+  if(f.file_type==='doc' || name.endsWith('.pdf')) return `<span class="${base}"><i class="fa-solid fa-file-pdf"></i></span>`;
+  return '';
+}
+
 function renderThumbGrid(containerId, listKey, list){
   LISTS[listKey] = list;
   const el = document.getElementById(containerId);
@@ -390,8 +402,7 @@ function renderThumbGrid(containerId, listKey, list){
     const hidden = f.show_hide==='hide';
     const shortcutsEnabled = String(STATE.config.show_admin_shortcuts).toLowerCase() !== 'false'; // default เปิด ถ้าไม่ได้ตั้งค่าไว้
     const hiddenBadge = hidden ? `<span class="absolute bottom-2 left-2 text-[10px] bg-black bg-opacity-60 text-white px-2 py-0.5 rounded-full z-10"><i class="fa-solid fa-eye-slash mr-1"></i>ซ่อน</span>` : '';
-    const videoBadge = f.file_type==='video' ? `<span class="absolute top-1.5 right-1.5 text-[10px] bg-black bg-opacity-60 text-white w-5 h-5 rounded-full flex items-center justify-center z-10 pointer-events-none"><i class="fa-solid fa-video"></i></span>` :
-      (f.file_type==='doc' ? `<span class="absolute top-1.5 right-1.5 text-[10px] bg-black bg-opacity-60 text-white w-5 h-5 rounded-full flex items-center justify-center z-10 pointer-events-none"><i class="fa-solid fa-file"></i></span>` : '');
+    const videoBadge = fileBadge(f, false);
     const adminShortcuts = (isAdminView() && shortcutsEnabled) ? `
       <button onclick="event.stopPropagation(); quickToggleShow('${f.file_id}','${hidden?'show':'hide'}')" title="${hidden?'เปิดตา':'ปิดตา'}" class="absolute top-1 left-1 w-6 h-6 rounded-full bg-black bg-opacity-50 text-white text-[10px] flex items-center justify-center hover:bg-opacity-80 z-20">
         <i class="fa-solid ${hidden?'fa-eye-slash':'fa-eye'}"></i>
@@ -1080,7 +1091,7 @@ function renderManageGrid(){
       <input type="checkbox" class="file-check absolute top-1 left-1 z-10 w-4 h-4" value="${f.file_id}">
       <img src="${thumb}" data-original="${thumb}" class="w-full h-full object-cover block" onerror="handleThumbError(this, ${f.file_type==='video'})">
       ${f.show_hide==='hide' ? `<span class="absolute bottom-1 left-1 text-[9px] bg-black bg-opacity-70 text-white px-1.5 py-0.5 rounded-full z-10"><i class="fa-solid fa-eye-slash"></i></span>` : ''}
-      ${f.file_type==='video' ? `<span class="absolute top-1 right-1 text-[9px] bg-black bg-opacity-70 text-white px-1 py-0.5 rounded z-10"><i class="fa-solid fa-video"></i></span>` : ''}
+      ${fileBadge(f, true)}
       <button onclick="event.preventDefault(); event.stopPropagation(); openLightboxFromList('manage', ${i})" title="ดูตัวอย่าง" class="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-black bg-opacity-60 text-white text-[10px] flex items-center justify-center hover:bg-opacity-90 z-10">
         <i class="fa-solid fa-expand"></i>
       </button>
