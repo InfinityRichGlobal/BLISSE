@@ -202,7 +202,7 @@ function handleThumbError(imgEl, isVideo){
 let STATE = {
   uid: null, profile: null, role: null, approved: false,
   config: {}, tags: [], files: [], showCounts: false,
-  activeType: 'all', activeTags: new Set(), untaggedOnly: false, hiddenOnly: false, viewAsUser: false, currentSet: [], lightboxIndex: 0
+  activeType: 'all', activeTags: new Set(), untaggedOnly: false, hiddenOnly: false, viewAsUser: false, pendingUsers: [], currentSet: [], lightboxIndex: 0
 };
 
 // ---------------- LIFF BOOTSTRAP ----------------
@@ -1043,16 +1043,50 @@ async function renderManagePanel(body){
 
   const pending = await api('pendingUsers', { uid: STATE.uid });
   const list = document.getElementById('pending-list');
-  if(!pending.pending || pending.pending.length===0){ list.textContent = 'ไม่มีคำขอค้าง'; }
+  if(!pending.pending || pending.pending.length===0){ list.textContent = 'ไม่มีคำขอค้าง'; STATE.pendingUsers = []; }
   else{
-    list.innerHTML = pending.pending.map(p=>`
+    // เก็บใน state แล้วอ้างด้วย index — ห้ามฝังชื่อลง onclick ตรงๆ (ชื่อมี ' เช่น Som'O จะทำ JS พังทั้งปุ่ม)
+    STATE.pendingUsers = pending.pending;
+    list.innerHTML = STATE.pendingUsers.map((p,i)=>`
       <div class="flex items-center gap-2 mb-2">
-        <img src="${p.picture_url}" class="w-8 h-8 rounded-full cursor-zoom-in" onclick="showProfilePic('${p.picture_url}')">
-        <span class="flex-1 text-xs">${p.display_name}</span>
-        <button onclick="approveUser('${p.line_user_id}','${p.display_name}','${p.picture_url}','user')" class="text-[10px] bg-black text-white px-2 py-1 rounded-full">สมาชิก</button>
-        <button onclick="approveUser('${p.line_user_id}','${p.display_name}','${p.picture_url}','admin')" class="text-[10px] border px-2 py-1 rounded-full">แอดมิน</button>
-      </div>`).join('');
+        <input type="checkbox" class="pending-check w-4 h-4" value="${i}">
+        <img src="${p.picture_url}" class="w-8 h-8 rounded-full cursor-zoom-in" onclick="showProfilePic(STATE.pendingUsers[${i}].picture_url)">
+        <span class="flex-1 text-xs truncate"></span>
+        <button onclick="approveUserByIndex(${i},'user')" class="text-[10px] bg-black text-white px-2 py-1 rounded-full whitespace-nowrap">สมาชิก</button>
+        <button onclick="approveUserByIndex(${i},'admin')" class="text-[10px] border px-2 py-1 rounded-full whitespace-nowrap">แอดมิน</button>
+      </div>`).join('') + `
+      <div class="flex items-center gap-2 mt-3 pt-2 border-t">
+        <span class="text-[10px] text-gray-400 flex-1">อนุมัติที่เลือกทั้งหมด:</span>
+        <button onclick="bulkApprovePending('user')" class="text-[10px] bg-black text-white px-3 py-1.5 rounded-full">เป็นสมาชิก</button>
+        <button onclick="bulkApprovePending('admin')" class="text-[10px] border px-3 py-1.5 rounded-full">เป็นแอดมิน</button>
+      </div>`;
+    // ใส่ชื่อผ่าน textContent (ปลอดภัยกับทุกอักขระ ไม่มีทาง inject/พัง)
+    list.querySelectorAll('.flex-1.text-xs').forEach((el,i)=>{ el.textContent = STATE.pendingUsers[i].display_name || STATE.pendingUsers[i].line_user_id; });
   }
+}
+
+async function approveUserByIndex(i, role){
+  const p = STATE.pendingUsers[i];
+  if(!p) return;
+  const res = await api('approveUser', { targetUid: p.line_user_id, displayName: p.display_name, pictureUrl: p.picture_url, role });
+  if(res.error){ toast('อนุมัติไม่สำเร็จ: ' + res.error, 'err'); return; }
+  toast(`อนุมัติ ${p.display_name || p.line_user_id} เป็น ${role} แล้ว`);
+  await refreshData();
+  if(!document.getElementById('admin-panel').classList.contains('hidden')) openPanel('manage');
+}
+
+async function bulkApprovePending(role){
+  const idx = Array.from(document.querySelectorAll('.pending-check:checked')).map(c=>parseInt(c.value));
+  if(idx.length===0){ toast('ยังไม่ได้เลือกใคร','err'); return; }
+  const users = idx.map(i=>{
+    const p = STATE.pendingUsers[i];
+    return { targetUid: p.line_user_id, displayName: p.display_name, pictureUrl: p.picture_url };
+  });
+  const res = await api('bulkApprove', { users, role });
+  if(res.error){ toast('อนุมัติไม่สำเร็จ: ' + res.error, 'err'); return; }
+  toast(`อนุมัติ ${res.approved} คนเป็น ${role} แล้ว${res.skipped>0?` (ข้ามซ้ำ ${res.skipped})`:''}`);
+  await refreshData();
+  if(!document.getElementById('admin-panel').classList.contains('hidden')) openPanel('manage');
 }
 
 function renderManageFilters(){
@@ -1331,14 +1365,6 @@ async function bulkSetTagVisibility(visibility){
   STATE.tags.forEach(t=>{ if(names.includes(t.tag_name)) t.visibility = visibility; });
   renderTagVisibilityList();
   renderTagPicker(); renderManageFilters();
-}
-
-async function approveUser(uid, name, pic, role){
-  const res = await api('approveUser', { targetUid: uid, displayName: name, pictureUrl: pic, role });
-  if(res.error){ toast('อนุมัติไม่สำเร็จ: ' + res.error, 'err'); return; }
-  toast(`อนุมัติ ${name} เป็น ${role} แล้ว`);
-  await refreshData();
-  if(!document.getElementById('admin-panel').classList.contains('hidden')) openPanel('manage');
 }
 
 window.onload = boot;
