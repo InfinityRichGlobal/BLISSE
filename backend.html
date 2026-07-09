@@ -12,40 +12,36 @@
     header{text-align:center;margin-bottom:14px;margin-top:15px}
     header .main{font-size:1.4rem;font-weight:700;letter-spacing:.6px}
     header .sub{font-size:.9rem;font-weight:400;opacity:.6;margin-top:4px}
-    #frame{width:100%;height:calc(100dvh - 130px);border:0;background:#fff;display:none}
-    #loading{margin-top:14px;font-size:.9rem;opacity:.6;text-align:center}
+    #loading{margin-top:40px;font-size:.95rem;opacity:.7;text-align:center}
+    .spinner{
+      width:34px;height:34px;margin:0 auto 14px;border-radius:50%;
+      border:3px solid #e5e7eb;border-top-color:#111827;
+      animation:spin .8s linear infinite;
+    }
+    @keyframes spin{ to{ transform:rotate(360deg) } }
     #brandRefresh { cursor:pointer; color:inherit; text-decoration:none; transition:opacity .2s; }
     #brandRefresh:hover { opacity:0.6; }
-
-    
-    /* กล่องสำรอง เผื่อ iframe โดนบล็อก */
-    #fallbackBox{
-      display:none; max-width:420px; margin:30px auto 0; text-align:center;
-      padding:20px; border:1px solid #e5e7eb; border-radius:12px; background:#fff;
-      box-shadow:0 2px 8px rgba(0,0,0,.06);
-    }
-    #fallbackBox p{ font-size:.9rem; color:#6b7280; margin:0 0 14px; line-height:1.6; }
-    #fallbackBox a.btn{
+    .manual-link{ display:none; margin-top:20px; text-align:center; }
+    .manual-link a{
       display:inline-block; padding:12px 22px; background:#111827; color:#fff;
       border-radius:8px; text-decoration:none; font-size:.95rem; font-weight:600;
     }
-    #fallbackBox a.btn:hover{ opacity:.85; }
+    .manual-link a:hover{ opacity:.85; }
   </style>
 </head>
 <body>
 <header>
   <div class="main"><span id="brandRefresh">Blissé</span> Backend ©</div>
   <div class="sub">ระบบหลังบ้านสำหรับการใช้งานภายในองค์กรเท่านั้น</div>
-  <div id="loading">กำลังโหลดระบบ...</div>
 </header>
 
-<!-- ✅ ปรับ: referrerpolicy เพื่อช่วยให้ Google ยอมให้ฝัง -->
-<iframe id="frame" referrerpolicy="no-referrer-when-downgrade"></iframe>
+<div id="loading">
+  <div class="spinner"></div>
+  กำลังเข้าสู่ระบบ...
+</div>
 
-<!-- ✅ กล่องสำรอง: ถ้า iframe โดนบล็อก จะโชว์ปุ่มให้เปิดเต็มหน้าแทน -->
-<div id="fallbackBox">
-  <p>ระบบไม่สามารถแสดงในกรอบได้ (ข้อจำกัดจาก Google)<br>กรุณาแตะปุ่มด้านล่างเพื่อเปิดระบบ</p>
-  <a href="#" class="btn" id="fallbackBtn">เปิดระบบ Blissé</a>
+<div class="manual-link" id="manualLink">
+  <a href="#" id="manualAnchor">แตะที่นี่เพื่อเปิดระบบ</a>
 </div>
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -53,44 +49,26 @@
   const GAS_EXEC_URL = "https://script.google.com/macros/s/AKfycbwrWUrm9qRq0009-RjUdBmu_j2Y2LsYK5uYtT2K9mc-eTy31CxOVLxAQ_Lu2eFUGIo/exec";
   const MY_LIFF_ID   = "2010125469-vugCvunJ";
 
-  const frame   = document.getElementById("frame");
   const loading = document.getElementById("loading");
 
-  function buildTargetUrl(uid){
+  function showManualLink(targetUrl){
+    const box = document.getElementById("manualLink");
+    const a = document.getElementById("manualAnchor");
+    a.href = targetUrl;
+    a.onclick = (e)=>{ e.preventDefault(); location.href = targetUrl; };
+    box.style.display = "block";
+  }
+
+  // พาไปที่ Web App ตรงๆ (ทั้งหน้า ไม่ใช้ iframe) — กันปัญหา X-Frame-Options
+  function goToApp(uid){
     const usp = new URLSearchParams(location.search);
     usp.delete("uid");
     const params = new URLSearchParams(usp);
     if (uid) params.set("uid", uid);
-    return GAS_EXEC_URL + (params.toString() ? ("?" + params.toString()) : "");
-  }
+    const target = GAS_EXEC_URL + (params.toString() ? ("?" + params.toString()) : "");
 
-  function showFallback(targetUrl){
-    loading.style.display = "none";
-    frame.style.display = "none";
-    const box = document.getElementById("fallbackBox");
-    const btn = document.getElementById("fallbackBtn");
-    btn.href = targetUrl;
-    btn.onclick = (e)=>{ e.preventDefault(); window.top.location.href = targetUrl; };
-    box.style.display = "block";
-  }
-
-  function loadIntoFrame(targetUrl){
-    let frameLoaded = false;
-
-    frame.addEventListener("load", ()=>{
-      frameLoaded = true;
-      loading.style.display = "none";
-      frame.style.display = "block";
-    });
-
-    frame.src = targetUrl;
-
-    // ✅ ถ้าเกิน 6 วิ iframe ยังไม่ยิง onload = น่าจะโดนบล็อก → โชว์ปุ่มสำรอง
-    setTimeout(()=>{
-      if (!frameLoaded){
-        showFallback(targetUrl);
-      }
-    }, 6000);
+    showManualLink(target);   // เตรียมลิงก์สำรองไว้ก่อน เผื่อ auto redirect โดนบล็อก
+    location.href = target;   // redirect ทั้งหน้า
   }
 
   (async () => {
@@ -129,11 +107,12 @@
         }).catch(() => {});
       }
 
-      loadIntoFrame(buildTargetUrl(uid));
+      goToApp(uid);
 
     } catch (e) {
       console.error("LIFF error:", e);
-      loadIntoFrame(buildTargetUrl(""));
+      loading.innerHTML = '<div class="spinner"></div>ไม่สามารถเชื่อมต่อ LINE ได้ กำลังพาเข้าระบบ...';
+      goToApp("");
     }
   })();
 </script>
