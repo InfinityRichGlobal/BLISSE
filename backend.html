@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Blissé | backend</title>
- <link rel="icon" type="image/x-icon" href="/BLISSE/favicon.ico">
+<link rel="icon" type="image/x-icon" href="/BLISSE/favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="/BLISSE/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/BLISSE/favicon-16x16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/BLISSE/apple-touch-icon.png">
@@ -106,39 +106,26 @@ th.sorted-desc .sort-icon::before{
   }
   .order-line-icon:hover{ transform:scale(1.2); }
 
-  /* ✅ Popup แสดงหน้าเว็บ FLEX (iframe เต็มจอ) */
-  .flex-popup-overlay{
-    position:fixed; inset:0; z-index:100002;
-    background:rgba(0,0,0,.6); backdrop-filter:blur(3px);
-    display:none; align-items:center; justify-content:center;
-    padding:16px;
+  /* ✅ ไอคอนใบเสร็จหน้า summary_col (กดดูสรุป) */
+  .summary-icon{
+    color:#8b5cf6;
+    cursor:pointer;
+    font-size:14px;
+    margin-right:3px;
+    transition:transform .15s;
   }
-  .flex-popup-box{
-    background:#fff; border-radius:14px; overflow:hidden;
-    width:100%; max-width:440px; height:82vh; max-height:82vh;
-    display:flex; flex-direction:column;
-    box-shadow:0 20px 60px rgba(0,0,0,.35);
+  .summary-icon:hover{ transform:scale(1.2); }
+
+  /* ✅ รายการสรุปใน popup */
+  .summary-popup-item{
+    display:flex; justify-content:space-between; gap:16px;
+    padding:6px 0; border-bottom:1px solid rgba(255,255,255,.12);
+    font-size:13px;
   }
-  .flex-popup-header{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:10px 14px; border-bottom:1px solid var(--border);
-    flex-shrink:0;
-  }
-  .flex-popup-header .title{ font-weight:600; font-size:14px; display:flex; align-items:center; gap:7px; }
-  .flex-popup-header .title i{ color:#06C755; }
-  .flex-popup-header button{
-    border:none; background:#f3f4f6; border-radius:8px;
-    width:30px; height:30px; cursor:pointer; font-size:16px; color:#374151;
-  }
-  .flex-popup-header button:hover{ background:#e5e7eb; }
-  .flex-popup-body{ flex:1; overflow:hidden; }
-  .flex-popup-body iframe{ width:100%; height:100%; border:0; }
-  .flex-popup-open{
-    display:block; text-align:center; padding:9px;
-    font-size:12px; color:var(--primary); border-top:1px solid var(--border);
-    text-decoration:none; flex-shrink:0;
-  }
-  .flex-popup-open:hover{ background:#f9fafb; }
+  .summary-popup-item:last-child{ border-bottom:none; }
+  .summary-popup-item .s-label{ color:#cbd5e1; flex-shrink:0; }
+  .summary-popup-item .s-value{ color:#fff; font-weight:600; text-align:right; word-break:break-word; }
+
 
   /* ✅ Popup แสดงข้อความเต็มเมื่อคลิก */
   .cell-popup{
@@ -324,20 +311,6 @@ th.sorted-desc .sort-icon::before{
 
   <div id="lb" class="lightbox" onclick="this.style.display='none'">
     <img id="lbImg" src="">
-  </div>
-
-  <!-- ✅ Popup แสดงหน้าเว็บ FLEX (share_url) -->
-  <div id="flexPopup" class="flex-popup-overlay" onclick="if(event.target===this) closeFlexPopup()">
-    <div class="flex-popup-box">
-      <div class="flex-popup-header">
-        <span class="title"><i class="fa-brands fa-line"></i> FLEX Message</span>
-        <button onclick="closeFlexPopup()" title="ปิด">&times;</button>
-      </div>
-      <div class="flex-popup-body">
-        <iframe id="flexPopupFrame" src="" referrerpolicy="no-referrer"></iframe>
-      </div>
-      <a href="#" id="flexPopupOpen" target="_blank" class="flex-popup-open">เปิดในแท็บใหม่ ↗</a>
-    </div>
   </div>
 
   <div id="unauthorizedModal" class="modal">
@@ -911,12 +884,15 @@ function escapeHtml(str){
 
 function renderTable(d){
   hideCellPopup(); // ✅ กันแสดง popup ค้างจากการ render ครั้งก่อน
+  if (typeof hideSummaryPopup === "function") hideSummaryPopup();
   const tz = document.getElementById("tableZone");
   const picIndices = d.pictureIndices || [];
   const orderNoIdx = d.orderNoColIndex !== undefined ? d.orderNoColIndex : -1;
   const checkIdx = d.checkColIndex !== undefined ? d.checkColIndex : -1;
   const amountIdx = d.amountColIndex !== undefined ? d.amountColIndex : -1;
   const flexMap = d.flexMap || {}; // ✅ order_no → share_url (จากชีต FLEX)
+  const summaryColIdx = d.summaryColIndex !== undefined ? d.summaryColIndex : -1; // ✅ คอลัมน์ที่มีไอคอนสรุป
+  const summaryData = d.summaryData || []; // ✅ ข้อมูลสรุปต่อแถว
   
   console.log("Column indices:", { orderNoIdx, checkIdx, amountIdx });
   
@@ -1020,7 +996,7 @@ function renderTable(d){
           // สร้างไอคอน LINE (แสดงเฉพาะเมื่อเจอ share_url ที่ตรงกัน)
           let lineIcon = "";
           if (shareUrl){
-            lineIcon = `<i class="fa-brands fa-line order-line-icon" title="ดู FLEX message" onclick="event.stopPropagation(); openFlexPopup('${encodeURIComponent(shareUrl)}')"></i> `;
+            lineIcon = `<i class="fa-brands fa-line order-line-icon" title="ดู FLEX message" onclick="event.stopPropagation(); openFlexLink('${encodeURIComponent(shareUrl)}')"></i> `;
           }
 
           // สีตามสถานะ Check (ถ้ามี Check column)
@@ -1032,6 +1008,18 @@ function renderTable(d){
           else if (checkValue.includes("รอตรวจ")){ style = "color:#f59e0b;"; prefix = "⏱ "; }
 
           html += `<td style="${style}white-space:nowrap;">${lineIcon}${prefix}${cellContent}</td>`;
+        }
+        else if (i === summaryColIdx && summaryColIdx >= 0){
+          // ✅ summary_col: เพิ่มไอคอนใบเสร็จ ที่กดแล้วสรุปข้อมูลจากช่วง summary_range (เฉพาะช่องมีค่า)
+          const items = summaryData[originalIdx] || [];
+          let cellContent = escapeHtml(c ?? "");
+          let summaryIcon = "";
+          if (items.length > 0){
+            // เก็บข้อมูลสรุปไว้ที่ data-summary (JSON) ให้ตอนกดไปสร้าง popup
+            const payload = encodeURIComponent(JSON.stringify(items));
+            summaryIcon = `<i class="fa-solid fa-receipt summary-icon" title="สรุปข้อมูล" onclick="event.stopPropagation(); openSummaryPopup(event, '${payload}')"></i> `;
+          }
+          html += `<td style="white-space:nowrap;">${summaryIcon}${cellContent}</td>`;
         }
         else {
           // ✅ จำกัดความกว้างคอลัมน์ข้อความยาว + ไอคอน Font Awesome บอกว่ามีข้อความซ่อน + คลิกดูเต็ม (escape กัน XSS)
@@ -1100,7 +1088,7 @@ function ensureCellPopup(){
   });
   // กด Esc = ปิด
   document.addEventListener("keydown", (e)=>{
-    if (e.key === "Escape"){ hideCellPopup(); closeFlexPopup(); }
+    if (e.key === "Escape"){ hideCellPopup(); }
   });
   _cellPopupEl = el;
   return el;
@@ -1345,25 +1333,75 @@ function openLB(enc){
   document.getElementById("lb").style.display="flex"; 
 }
 
-// ✅ เปิด popup แสดงหน้าเว็บ FLEX (share_url) — ปิดแล้วกลับหน้าเดิม ไม่ออกจากระบบ
-function openFlexPopup(enc){
+// ✅ เปิด FLEX (share_url) ในแท็บใหม่ — หน้าเดิมไม่หาย ปิดแท็บใหม่กลับมาได้ทันที
+function openFlexLink(enc){
   const url = decodeURIComponent(enc);
-  const frame = document.getElementById("flexPopupFrame");
-  const openLink = document.getElementById("flexPopupOpen");
-  frame.src = url;
-  openLink.href = url;
-  document.getElementById("flexPopup").style.display = "flex";
+  window.open(url, "_blank");
 }
-function closeFlexPopup(){
-  document.getElementById("flexPopup").style.display = "none";
-  // ล้าง iframe จริงๆ กันเสียง/วีดีโอเล่นค้างเบื้องหลัง
-  document.getElementById("flexPopupFrame").src = "";
+
+// ✅ Popup สรุปข้อมูล (จาก summary_range) — แสดง label:value เฉพาะช่องมีค่า
+let _summaryPopupEl = null;
+function ensureSummaryPopup(){
+  if (_summaryPopupEl) return _summaryPopupEl;
+  const el = document.createElement("div");
+  el.className = "cell-popup"; // ใช้สไตล์เดียวกับ cell-popup (พื้นเข้ม ลอยตำแหน่ง)
+  el.innerHTML = `
+    <div class="summary-popup-body" style="max-height:44vh;overflow-y:auto;margin-bottom:10px;"></div>
+    <div class="cell-popup-actions">
+      <button type="button" class="btn-close-popup"><i class="fa-solid fa-xmark"></i> ปิด</button>
+    </div>
+  `;
+  document.body.appendChild(el);
+  el.querySelector(".btn-close-popup").onclick = ()=> hideSummaryPopup();
+  document.addEventListener("click", (e)=>{
+    if (_summaryPopupEl && _summaryPopupEl.style.display === "block" && !_summaryPopupEl.contains(e.target)){
+      hideSummaryPopup();
+    }
+  });
+  document.addEventListener("keydown", (e)=>{ if (e.key === "Escape") hideSummaryPopup(); });
+  _summaryPopupEl = el;
+  return el;
+}
+
+function openSummaryPopup(event, payload){
+  let items = [];
+  try{ items = JSON.parse(decodeURIComponent(payload)); }catch(e){ return; }
+  if (!items.length) return;
+
+  const el = ensureSummaryPopup();
+  const body = el.querySelector(".summary-popup-body");
+  body.innerHTML = items.map(it=>`
+    <div class="summary-popup-item">
+      <span class="s-label">${escapeHtml(it.header)}</span>
+      <span class="s-value">${escapeHtml(it.value)}</span>
+    </div>
+  `).join("");
+  el.style.display = "block";
+
+  // จัดตำแหน่งใกล้ไอคอนที่คลิก ไม่ล้นจอ
+  const rect = (event.target || event.currentTarget).getBoundingClientRect();
+  const popupWidth = Math.min(320, window.innerWidth * 0.86);
+  let left = rect.left;
+  let top = rect.bottom + 6;
+  if (left + popupWidth > window.innerWidth - 8) left = window.innerWidth - popupWidth - 8;
+  if (left < 8) left = 8;
+  const estHeight = Math.min(items.length * 34 + 60, window.innerHeight * 0.5);
+  if (top + estHeight > window.innerHeight){
+    top = Math.max(8, rect.top - 6 - estHeight);
+  }
+  el.style.left = left + "px";
+  el.style.top = top + "px";
+  el.style.width = popupWidth + "px";
+}
+
+function hideSummaryPopup(){
+  if (_summaryPopupEl) _summaryPopupEl.style.display = "none";
 }
 
 function backToGallery(){
   // ปิด popup/modal ที่อาจค้างอยู่
   hideCellPopup();
-  closeFlexPopup();
+  if (typeof hideSummaryPopup === "function") hideSummaryPopup();
   const editM = document.getElementById("editModal"); if (editM) editM.style.display = "none";
   const detailM = document.getElementById("detailModal"); if (detailM) detailM.style.display = "none";
   const dashM = document.getElementById("dashboardModal"); if (dashM) dashM.style.display = "none";
