@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Blissé | backend</title>
+ <link rel="icon" type="image/x-icon" href="/BLISSE/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/BLISSE/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/BLISSE/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/BLISSE/apple-touch-icon.png">
+<link rel="manifest" href="/BLISSE/site.webmanifest">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
@@ -90,6 +95,50 @@ th.sorted-desc .sort-icon::before{
   @media (max-width:768px){
     .cell-truncate{ max-width:130px; }
   }
+
+  /* ✅ ไอคอน LINE หน้าเลข order_no (กดดู FLEX) */
+  .order-line-icon{
+    color:#06C755;
+    cursor:pointer;
+    font-size:15px;
+    margin-right:2px;
+    transition:transform .15s;
+  }
+  .order-line-icon:hover{ transform:scale(1.2); }
+
+  /* ✅ Popup แสดงหน้าเว็บ FLEX (iframe เต็มจอ) */
+  .flex-popup-overlay{
+    position:fixed; inset:0; z-index:100002;
+    background:rgba(0,0,0,.6); backdrop-filter:blur(3px);
+    display:none; align-items:center; justify-content:center;
+    padding:16px;
+  }
+  .flex-popup-box{
+    background:#fff; border-radius:14px; overflow:hidden;
+    width:100%; max-width:440px; height:82vh; max-height:82vh;
+    display:flex; flex-direction:column;
+    box-shadow:0 20px 60px rgba(0,0,0,.35);
+  }
+  .flex-popup-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 14px; border-bottom:1px solid var(--border);
+    flex-shrink:0;
+  }
+  .flex-popup-header .title{ font-weight:600; font-size:14px; display:flex; align-items:center; gap:7px; }
+  .flex-popup-header .title i{ color:#06C755; }
+  .flex-popup-header button{
+    border:none; background:#f3f4f6; border-radius:8px;
+    width:30px; height:30px; cursor:pointer; font-size:16px; color:#374151;
+  }
+  .flex-popup-header button:hover{ background:#e5e7eb; }
+  .flex-popup-body{ flex:1; overflow:hidden; }
+  .flex-popup-body iframe{ width:100%; height:100%; border:0; }
+  .flex-popup-open{
+    display:block; text-align:center; padding:9px;
+    font-size:12px; color:var(--primary); border-top:1px solid var(--border);
+    text-decoration:none; flex-shrink:0;
+  }
+  .flex-popup-open:hover{ background:#f9fafb; }
 
   /* ✅ Popup แสดงข้อความเต็มเมื่อคลิก */
   .cell-popup{
@@ -275,6 +324,20 @@ th.sorted-desc .sort-icon::before{
 
   <div id="lb" class="lightbox" onclick="this.style.display='none'">
     <img id="lbImg" src="">
+  </div>
+
+  <!-- ✅ Popup แสดงหน้าเว็บ FLEX (share_url) -->
+  <div id="flexPopup" class="flex-popup-overlay" onclick="if(event.target===this) closeFlexPopup()">
+    <div class="flex-popup-box">
+      <div class="flex-popup-header">
+        <span class="title"><i class="fa-brands fa-line"></i> FLEX Message</span>
+        <button onclick="closeFlexPopup()" title="ปิด">&times;</button>
+      </div>
+      <div class="flex-popup-body">
+        <iframe id="flexPopupFrame" src="" referrerpolicy="no-referrer"></iframe>
+      </div>
+      <a href="#" id="flexPopupOpen" target="_blank" class="flex-popup-open">เปิดในแท็บใหม่ ↗</a>
+    </div>
   </div>
 
   <div id="unauthorizedModal" class="modal">
@@ -853,6 +916,7 @@ function renderTable(d){
   const orderNoIdx = d.orderNoColIndex !== undefined ? d.orderNoColIndex : -1;
   const checkIdx = d.checkColIndex !== undefined ? d.checkColIndex : -1;
   const amountIdx = d.amountColIndex !== undefined ? d.amountColIndex : -1;
+  const flexMap = d.flexMap || {}; // ✅ order_no → share_url (จากชีต FLEX)
   
   console.log("Column indices:", { orderNoIdx, checkIdx, amountIdx });
   
@@ -947,25 +1011,27 @@ function renderTable(d){
             html += `<td>${escapeHtml(c ?? "")}</td>`;
           }
         }
-        else if (i === orderNoIdx && orderNoIdx >= 0 && checkIdx >= 0){
-          const checkValue = String(r[checkIdx] || "").trim();
+        else if (i === orderNoIdx && orderNoIdx >= 0){
+          // ✅ order_no: เพิ่มไอคอน LINE นำหน้า ถ้า order_no นี้มี share_url ใน FLEX
+          const orderNoRaw = String(c ?? "").trim();
+          const shareUrl = flexMap[orderNoRaw] || "";
           let cellContent = escapeHtml(c ?? "");
-          
-          if (!checkValue){
-            html += `<td>${cellContent}</td>`;
+
+          // สร้างไอคอน LINE (แสดงเฉพาะเมื่อเจอ share_url ที่ตรงกัน)
+          let lineIcon = "";
+          if (shareUrl){
+            lineIcon = `<i class="fa-brands fa-line order-line-icon" title="ดู FLEX message" onclick="event.stopPropagation(); openFlexPopup('${encodeURIComponent(shareUrl)}')"></i> `;
           }
-          else if (checkValue === "✅"){
-            html += `<td style="color:#10b981;font-weight:600;">✓ ${cellContent}</td>`;
-          }
-          else if (checkValue.startsWith("❌")){
-            html += `<td style="color:#dc2626;text-decoration:line-through;">✕ ${cellContent}</td>`;
-          }
-          else if (checkValue.includes("รอตรวจ")){
-            html += `<td style="color:#f59e0b;">⏱ ${cellContent}</td>`;
-          }
-          else {
-            html += `<td>${cellContent}</td>`;
-          }
+
+          // สีตามสถานะ Check (ถ้ามี Check column)
+          const checkValue = (checkIdx >= 0) ? String(r[checkIdx] || "").trim() : "";
+          let style = "";
+          let prefix = "";
+          if (checkValue === "✅"){ style = "color:#10b981;font-weight:600;"; prefix = "✓ "; }
+          else if (checkValue.startsWith("❌")){ style = "color:#dc2626;text-decoration:line-through;"; prefix = "✕ "; }
+          else if (checkValue.includes("รอตรวจ")){ style = "color:#f59e0b;"; prefix = "⏱ "; }
+
+          html += `<td style="${style}white-space:nowrap;">${lineIcon}${prefix}${cellContent}</td>`;
         }
         else {
           // ✅ จำกัดความกว้างคอลัมน์ข้อความยาว + ไอคอน Font Awesome บอกว่ามีข้อความซ่อน + คลิกดูเต็ม (escape กัน XSS)
@@ -1034,7 +1100,7 @@ function ensureCellPopup(){
   });
   // กด Esc = ปิด
   document.addEventListener("keydown", (e)=>{
-    if (e.key === "Escape") hideCellPopup();
+    if (e.key === "Escape"){ hideCellPopup(); closeFlexPopup(); }
   });
   _cellPopupEl = el;
   return el;
@@ -1279,9 +1345,25 @@ function openLB(enc){
   document.getElementById("lb").style.display="flex"; 
 }
 
+// ✅ เปิด popup แสดงหน้าเว็บ FLEX (share_url) — ปิดแล้วกลับหน้าเดิม ไม่ออกจากระบบ
+function openFlexPopup(enc){
+  const url = decodeURIComponent(enc);
+  const frame = document.getElementById("flexPopupFrame");
+  const openLink = document.getElementById("flexPopupOpen");
+  frame.src = url;
+  openLink.href = url;
+  document.getElementById("flexPopup").style.display = "flex";
+}
+function closeFlexPopup(){
+  document.getElementById("flexPopup").style.display = "none";
+  // ล้าง iframe จริงๆ กันเสียง/วีดีโอเล่นค้างเบื้องหลัง
+  document.getElementById("flexPopupFrame").src = "";
+}
+
 function backToGallery(){
   // ปิด popup/modal ที่อาจค้างอยู่
   hideCellPopup();
+  closeFlexPopup();
   const editM = document.getElementById("editModal"); if (editM) editM.style.display = "none";
   const detailM = document.getElementById("detailModal"); if (detailM) detailM.style.display = "none";
   const dashM = document.getElementById("dashboardModal"); if (dashM) dashM.style.display = "none";
