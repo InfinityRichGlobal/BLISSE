@@ -1,122 +1,1726 @@
 <!DOCTYPE html>
 <html lang="th">
-  
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Blissé | Backend System</title>
-  <meta name="description" content="ระบบหลังบ้านสำหรับจัดการและตรวจสอบออเดอร์ — สงวนสิทธิ์การใช้งานสำหรับบุคลากรที่ได้รับอนุญาตเท่านั้น" />
-  <link rel="shortcut icon" href="https://lh3.googleusercontent.com/d/1Z6epAXtRcw0K6ad_32EjbYhuXSKm6JTq" />
-  <style>
-    :root{ --bg:#f5f6f7; --ink:#111827; }
-    body{ margin:0; padding:10px; font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto; }
-    header{text-align:center;margin-bottom:14px;margin-top:15px}
-    header .main{font-size:1.4rem;font-weight:700;letter-spacing:.6px}
-    header .sub{font-size:.9rem;font-weight:400;opacity:.6;margin-top:4px}
-    #loading{margin-top:40px;font-size:.95rem;opacity:.7;text-align:center}
-    .spinner{
-      width:34px;height:34px;margin:0 auto 14px;border-radius:50%;
-      border:3px solid #e5e7eb;border-top-color:#111827;
-      animation:spin .8s linear infinite;
-    }
-    @keyframes spin{ to{ transform:rotate(360deg) } }
-    #brandRefresh { cursor:pointer; color:inherit; text-decoration:none; transition:opacity .2s; }
-    #brandRefresh:hover { opacity:0.6; }
-    .manual-link{ display:none; margin-top:20px; text-align:center; }
-    .manual-link a{
-      display:inline-block; padding:12px 22px; background:#111827; color:#fff;
-      border-radius:8px; text-decoration:none; font-size:.95rem; font-weight:600;
-    }
-    .manual-link a:hover{ opacity:.85; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blissé | backend</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  *{ margin:0; padding:0; box-sizing:border-box }
+  :root{ --bg:#fafafa; --card:#fff; --shadow:0 2px 8px rgba(0,0,0,.06); --border:#e5e7eb; --primary:#3b82f6; --text:#1f2937 }
+  body{ background:#ffffff; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif; color:var(--text); font-size:14px; line-height:1.5 }
+  .wrap{ max-width:1400px; margin:0 auto; padding:16px }
+  
+  /* gallery */
+  #gallery{ display:grid; grid-template-columns:repeat(auto-fill,minmax(450px,1fr)); gap:12px }
+  @media (max-width:768px){ #gallery{ grid-template-columns:1fr } }
+  .item{ background:var(--card); border-radius:8px; overflow:hidden; box-shadow:var(--shadow); cursor:pointer; transition:transform .2s }
+  .item:hover{ transform:translateY(-2px) }
+  .item img{ width:100%; aspect-ratio:9 / 16; object-fit:cover; display:block }
+
+
+/* .export-btn:disabled{ background:#ccc; cursor:not-allowed } */
+  
+  /* table */
+  #tableView{ display:none }
+ .back{ margin-bottom:12px; padding:8px 16px; background:var(--card); border:1px solid var(--border); border-radius:6px; cursor:pointer; display:inline-block; font-size:13px }
+  .back:hover{ background:#f9fafb }
+  #filterZone{ margin-bottom:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+  .export-btn{ padding:8px 16px; background:#fff; color:#000000; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500 }
+  .export-btn:hover{ background:#06C755; color:#fff }
+  select{ padding:8px 12px; border:1px solid var(--border); border-radius:6px; background:var(--card); font-size:13px }
+  .tableWrap{ overflow-x:auto; background:var(--card); border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow) }
+  table{ width:100%; border-collapse:collapse; font-size:13px }
+  th,td{ padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap }
+  /* th{ background:#f9fafb; font-weight:600; position:sticky; top:0; z-index:2; text-align:left } */
+  th{ 
+  background:#f9fafb; 
+  font-weight:600; 
+  position:sticky; 
+  top:0; 
+  z-index:2; 
+  text-align:left; 
+  cursor:pointer; 
+  user-select:none 
+}
+th:hover{ 
+  background:#f3f4f6 
+}
+th .sort-icon{ 
+  margin-left:4px; 
+  font-size:10px; 
+  color:#9ca3af 
+}
+th.sorted-asc .sort-icon::before{ 
+  content:"▲"; 
+  color:var(--primary) 
+}
+th.sorted-desc .sort-icon::before{ 
+  content:"▼"; 
+  color:var(--primary) 
+}
+  td{ vertical-align:middle }
+  td img.thumb{ max-height:60px; border-radius:4px; cursor:pointer }
+  tr:hover{ background:#fafbfc }
+  .row-num{ cursor:pointer; color:var(--primary); font-weight:600; user-select:none }
+  .row-num:hover{ text-decoration:underline }
+
+  /* ✅ จำกัดความกว้างคอลัมน์ข้อความยาว (เช่นที่อยู่) + ไอคอนบอกว่ามีข้อความซ่อนอยู่ + คลิกดูเต็ม */
+  .cell-truncate{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    max-width:220px;
+  }
+  .cell-truncate .cell-text{
+    overflow:hidden;
+    text-overflow:clip;
+    white-space:nowrap;
+    max-width:100%;
+  }
+  .cell-truncate.has-more{ cursor:pointer; }
+  .cell-truncate .cell-more-icon{
+    display:none;
+    flex-shrink:0;
+    color:var(--primary);
+    font-size:12px;
+  }
+  .cell-truncate.has-more .cell-more-icon{ display:inline-block; }
+  @media (max-width:768px){
+    .cell-truncate{ max-width:130px; }
+  }
+
+  /* ✅ Popup แสดงข้อความเต็มเมื่อคลิก */
+  .cell-popup{
+    position:fixed;
+    z-index:100001;
+    background:#111827;
+    color:#fff;
+    padding:12px 14px;
+    border-radius:8px;
+    box-shadow:0 12px 32px rgba(0,0,0,.28);
+    max-width:min(360px, 86vw);
+    font-size:13px;
+    line-height:1.6;
+    display:none;
+  }
+  .cell-popup .cell-popup-text{
+    word-break:break-word;
+    white-space:pre-wrap;
+    margin-bottom:10px;
+    max-height:40vh;
+    overflow-y:auto;
+  }
+  .cell-popup .cell-popup-actions{
+    display:flex;
+    gap:8px;
+    justify-content:flex-end;
+  }
+  .cell-popup button{
+    border:none;
+    border-radius:6px;
+    padding:6px 10px;
+    font-size:12px;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+  }
+  .cell-popup .btn-copy{ background:#3b82f6; color:#fff; }
+  .cell-popup .btn-copy:hover{ background:#2563eb; }
+  .cell-popup .btn-close-popup{ background:#374151; color:#fff; }
+  .cell-popup .btn-close-popup:hover{ background:#1f2937; }
+  
+  /* lightbox */
+  .lightbox{ position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:100000; backdrop-filter:blur(4px) }
+  .lightbox img{ max-width:90vw; max-height:90vh; border-radius:8px }
+  
+  /* modal */
+  .modal{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; z-index:10000; backdrop-filter:blur(2px) }
+  .modal-content{ background:var(--card); padding:15px; border-radius:5px; width:95%; max-height:95vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.3) }
+  .modal-content h2{ margin:0 0 16px; font-size:18px; color:#dc2626 }
+  .modal-content p{ margin:0 0 20px; color:#6b7280; line-height:1.6 }
+  .modal-content button{ padding:10px 24px; background:#000000; color:#fff; border:none; border-radius:5px; cursor:pointer; font-size:14px; font-weight:500 }
+  .modal-content button:hover{ background:#ff0000 }
+  
+  /* detail modal */
+  .detail-modal .modal-content{ max-width:500px }
+  .detail-modal h2{ color:var(--text); font-size:16px }
+  .detail-row{ display:flex; padding:10px 0; border-bottom:1px solid var(--border) }
+  .detail-row:last-child{ border-bottom:none }
+  .detail-label{ font-weight:600; min-width:140px; color:#6b7280; flex-shrink:0 }
+  .detail-value{ flex:1; word-break:break-word }
+  .detail-value img{ max-width:100px; height:auto; border-radius:5px; margin-top:4px; cursor:pointer }
+  .detail-value img:hover{ opacity:.9 }
+  .loading{ padding:40px; text-align:center; color:#6b7280 }
+
+.amount-summary{  background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);  color:#fff;  padding:16px 24px;  border-radius:12px;  margin-bottom:16px;
+ display:flex;  align-items:center;  gap:12px;  box-shadow:0 4px 12px rgba(102,126,234,0.3);}
+.amount-summary .icon{font-size:32px;}
+.amount-summary .content{flex:1;}
+.amount-summary .label{font-size:16px;font-weight:600;margin-bottom:4px;} /* ✅ แก้ไข */
+.amount-summary .value{font-size:24px;font-weight:700;}
+
+.edit-modal .modal-content{max-width:600px;}
+
+.edit-field{margin-bottom:16px;}
+.edit-field label{display:block;font-weight:600;color:#374151;margin-bottom:6px;font-size:13px;}
+.edit-field input[type="text"],.edit-field input[type="number"],.edit-field select,.edit-field textarea{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit;}
+.edit-field input[readonly]{background:#f3f4f6;cursor:not-allowed;}
+.edit-field.locked{opacity:0.6;}
+.edit-field img.preview{max-width:120px;height:auto;border-radius:6px;margin-top:8px;}
+
+.team-option{display:flex;align-items:center;gap:8px;}
+.team-option img{width:24px;height:24px;border-radius:50%;object-fit:cover;}
+.check-remark{margin-top:8px;}
+.modal-actions{display:flex;gap:12px;margin-top:24px;justify-content:flex-end;}
+.modal-actions button{padding:10px 24px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;}
+.btn-save{background:#10b981;color:#fff;}
+.btn-save:hover{background:#059669;}
+.btn-cancel{background:#6b7280;color:#fff;}
+.btn-cancel:hover{background:#4b5563;}
+.btn-verify{background:#f59e0b;color:#fff;}
+.btn-verify:hover{background:#d97706;}
+
+
+
+.search-box{   padding:5px 8px;   border:1px solid var(--border);   border-radius:6px;   background:var(--card);   font-size:13px }
+.search-box:focus{   outline:none;   border-color:var(--primary);   box-shadow:0 0 0 3px rgba(59,130,246,0.1) }
+
+
+.dashboard-modal .modal-content{ max-width:980px; }
+.team-grid{  display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr));  gap:12px; margin-top:16px}
+.team-card{  display:flex; gap:12px; align-items:center; background:#fff; border:1px solid var(--border);  border-radius:12px; padding:12px; box-shadow:var(--shadow)}
+.team-card img{  width:48px; height:48px; border-radius:50%; object-fit:cover}
+.team-meta{ flex:1 }
+.team-meta .name{ font-weight:700 }
+.team-meta .sub{ font-size:12px; color:#6b7280 }
+.team-bar{  height:8px; background:#f3f4f6; border-radius:999px; overflow:hidden; margin-top:8px}
+.team-bar .fill{ height:100%; background:#10b981; width:0% }
+
+.filter-actions{
+  width:100%;
+  display:flex;
+  justify-content:flex-end;  /* <<< ชิดขวา */
+}
+
+/* ✅ Custom team dropdown (มีรูป thumbnail หน้าชื่อทีม) */
+.team-dropdown{ position:relative; display:inline-block; }
+.team-dropdown-btn{
+  display:flex; align-items:center; gap:6px;
+  padding:8px 12px; border:1px solid var(--border); border-radius:6px;
+  background:var(--card); font-size:13px; cursor:pointer; min-width:140px;
+}
+.team-dropdown-btn:hover{ background:#f9fafb; }
+.team-dropdown-avatar{
+  width:18px; height:18px; border-radius:50%; object-fit:cover; flex-shrink:0;
+}
+.team-dropdown-btn .caret{ margin-left:auto; font-size:10px; color:#9ca3af; }
+/* ✅ position:fixed + คำนวณตำแหน่งด้วย JS กันล้นขอบจอ (โดยเฉพาะมือถือ) */
+.team-dropdown-list{
+  position:fixed; min-width:200px; max-width:calc(100vw - 16px); max-height:280px;
+  overflow-y:auto; overflow-x:hidden; background:var(--card); border:1px solid var(--border); border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.12); z-index:100050; padding:4px; box-sizing:border-box;
+}
+.team-dropdown-item{
+  display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:6px;
+  cursor:pointer; font-size:13px;
+}
+.team-dropdown-item:hover{ background:#f3f4f6; }
+.team-dropdown-item.active{ background:#eff6ff; font-weight:600; }
+.team-dropdown-item img{ width:20px; height:20px; border-radius:50%; object-fit:cover; flex-shrink:0; }
+.team-dropdown-item .count{ margin-left:auto; color:#9ca3af; font-size:12px; flex-shrink:0; }
+.team-dropdown-item span:nth-child(2){ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.team-dropdown-item.unassigned img{ opacity:.6; }
+
+/* ✅ Header Blissé (แทนหน้า wrapper เดิม) */
+.app-header{
+  text-align:center;
+  padding:14px 10px 12px;
+  border-bottom:1px solid var(--border);
+  margin-bottom:14px;
+}
+.app-header .main{
+  font-size:1.4rem; font-weight:700; letter-spacing:.6px; color:var(--text);
+}
+.app-header .main #brandRefresh{
+  cursor:pointer; transition:opacity .2s;
+}
+.app-header .main #brandRefresh:hover{ opacity:.6; }
+.app-header .sub{
+  font-size:.85rem; font-weight:400; opacity:.55; margin-top:3px;
+}
+
+
+</style>
 </head>
 <body>
-<header>
-  <div class="main"><span id="brandRefresh">Blissé</span> Backend ©</div>
+<!-- ✅ Header Blissé: กดที่ชื่อเพื่อกลับหน้าแรก (gallery) -->
+<div class="app-header">
+  <div class="main"><span id="brandRefresh" onclick="backToGallery()">Blissé</span> Backend ©</div>
   <div class="sub">ระบบหลังบ้านสำหรับการใช้งานภายในองค์กรเท่านั้น</div>
-</header>
-
-<div id="loading">
-  <div class="spinner"></div>
-  กำลังเข้าสู่ระบบ...
 </div>
 
-<div class="manual-link" id="manualLink">
-  <a href="#" id="manualAnchor">แตะที่นี่เพื่อเปิดระบบ</a>
+<div class="wrap">
+  <div id="galleryView">
+    <div id="gallery"></div>
+  </div>
+
+  <div id="tableView">
+    <div class="back" onclick="backToGallery()">← กลับ</div>
+    <div id="filterZone"></div>
+    <div class="tableWrap"><div id="tableZone"></div></div>
+  </div>
+
+  <div id="lb" class="lightbox" onclick="this.style.display='none'">
+    <img id="lbImg" src="">
+  </div>
+
+  <div id="unauthorizedModal" class="modal">
+    <div class="modal-content">
+      <h2>⚠️ ไม่มีสิทธิ์เข้าถึง</h2>
+      <p>กรุณาติดต่อเจ้าหน้าที่เพื่อขอสิทธิ์การเข้าใช้งาน</p>
+      <button onclick="closeUnauthorizedModal()">ปิด</button>
+    </div>
+  </div>
+
+  <div id="detailModal" class="modal detail-modal">
+    <div class="modal-content">
+      <h2 id="detailTitle">รายละเอียด</h2>
+      <div id="detailBody"></div>
+
+    </div>
+  </div>
+
+  <div id="editModal" class="modal edit-modal">
+  <div class="modal-content">
+    <h2>✏️ แก้ไขข้อมูล</h2>
+    <div id="editBody"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeEditModal()">ยกเลิก</button>
+      <button class="btn-save" onclick="saveEdit()">💾 บันทึก</button>
+    </div>
+  </div>
 </div>
 
-<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+ <!-- ===== Dashboard Modal ===== -->
+<div id="dashboardModal" class="modal dashboard-modal">
+  <div class="modal-content" style="max-width:980px">
+    <div id="dashHeader" style="display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-weight:700;font-size:16px">📊 Dashboard</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label style="font-weight:600">เดือน:</label>
+        <select id="dashMonth" style="padding:8px 12px;border:1px solid #e5e7eb;border-radius:6px;background:#fff;font-size:13px">
+          <option value="">ทั้งหมด</option>
+        </select>
+        <button onclick="closeDashboard()" class="btn-cancel" style="margin-left:8px">ปิด</button>
+      </div>
+    </div>
+    <div id="dashBody"></div>
+  </div>
+</div>
+
+
+</div>
+
+
+
 <script>
-  const GAS_EXEC_URL = "https://script.google.com/macros/s/AKfycbwrWUrm9qRq0009-RjUdBmu_j2Y2LsYK5uYtT2K9mc-eTy31CxOVLxAQ_Lu2eFUGIo/exec";
-  const MY_LIFF_ID   = "2010125469-vugCvunJ";
+// ✅ สถาปัตยกรรมใหม่: หน้านี้อยู่บน GitHub เรียกข้อมูลจาก Apps Script ผ่าน fetch → JSON
+// ไม่ใช้ iframe / google.script.run ของ GAS อีก จึงไม่โดน X-Frame-Options บล็อก
 
-  const loading = document.getElementById("loading");
+// ⚠️ แก้ URL นี้ให้เป็น /exec ของ Web App คุณ (Deploy → Manage deployments → คัดลอก Web app URL)
+const API_URL = "https://script.google.com/macros/s/AKfycbwrWUrm9qRq0009-RjUdBmu_j2Y2LsYK5uYtT2K9mc-eTy31CxOVLxAQ_Lu2eFUGIo/exec";
 
-  function showManualLink(targetUrl){
-    const box = document.getElementById("manualLink");
-    const a = document.getElementById("manualAnchor");
-    a.href = targetUrl;
-    a.onclick = (e)=>{ e.preventDefault(); location.href = targetUrl; };
-    box.style.display = "block";
+// UID: ใช้ getter ที่คืนค่า uid จาก LIFF login (set ทีหลังใน window.__RESOLVED_UID__)
+// เผื่อกรณีเปิดตรงด้วย ?uid=... ก็ยังรองรับ
+Object.defineProperty(window, "UID", {
+  get(){ return window.__RESOLVED_UID__ || new URLSearchParams(location.search).get("uid") || ""; }
+});
+
+// รายชื่อ action ที่เป็น POST (เขียนข้อมูล) — ที่เหลือเป็น GET (อ่าน)
+const POST_ACTIONS = new Set(["saveEditData", "exportToSheets", "logLiff"]);
+
+// map: ชื่อ method → ชื่อ argument ตามลำดับ (ให้ shim รู้ว่าจะแปลง args เป็น param ยังไง)
+const METHOD_ARGS = {
+  getStructure:      [],
+  openRow:           ["rowIndex", "uid"],
+  getData:           ["rowIndex", "team", "month", "uid"],
+  getDashboardData:  ["rowIndex", "months", "uid"],
+  getTeamList:       [],
+  getStructureInfo:  ["rowIndex", "uid"],
+  getAmountColIndex: ["rowIndex", "uid"],
+  getCheckCol:       ["rowIndex", "uid"],
+  getEditData:       ["rowIndex", "dataRowIndex", "currentRowData", "uid"],
+  saveEditData:      ["sheetId", "sheetName", "rowIndex", "updates", "uid"],
+  exportToSheets:    ["data", "title", "uid"],
+  logLiff:           ["userId", "displayName", "pictureUrl"]
+};
+
+// เรียก API จริง (คืน Promise)
+async function callApi_(method, args){
+  const argNames = METHOD_ARGS[method] || [];
+  const isPost = POST_ACTIONS.has(method);
+
+  if (isPost){
+    // POST: ส่ง body เป็น JSON
+    const body = { action: method };
+    argNames.forEach((name, i)=>{ body[name] = args[i]; });
+    const res = await fetch(API_URL, { method: "POST", body: JSON.stringify(body) });
+    return res.json();
+  } else {
+    // GET: แปะ params ต่อท้าย URL (object/array ถูก JSON.stringify ก่อน)
+    const params = new URLSearchParams({ action: method });
+    argNames.forEach((name, i)=>{
+      let v = args[i];
+      if (v === undefined || v === null) v = "";
+      else if (typeof v === "object") v = JSON.stringify(v);
+      params.set(name, v);
+    });
+    params.set("_t", Date.now()); // cache-buster กัน browser คืน response เก่า
+    const res = await fetch(API_URL + "?" + params.toString());
+    return res.json();
+  }
+}
+
+// ✅ Shim: เลียนแบบ google.script.run API เดิม แต่ข้างในเรียก fetch()
+// ทำให้โค้ดเดิมที่เขียนแบบ .withSuccessHandler(fn).withFailureHandler(fn).method(args) ใช้ได้เหมือนเดิม
+const google = {
+  script: {
+    run: (function(){
+      function makeRunner(){
+        let successFn = null, failureFn = null;
+        const runner = {
+          withSuccessHandler(fn){ successFn = fn; return runner; },
+          withFailureHandler(fn){ failureFn = fn; return runner; }
+        };
+        // ใส่ทุก method จาก METHOD_ARGS ให้ runner
+        Object.keys(METHOD_ARGS).forEach(method=>{
+          runner[method] = function(...args){
+            callApi_(method, args)
+              .then(result => { if (successFn) successFn(result); })
+              .catch(err => {
+                console.error("[api] " + method + " failed:", err);
+                if (failureFn) failureFn(err);
+              });
+            return runner;
+          };
+        });
+        return runner;
+      }
+      // ทุกครั้งที่อ้าง google.script.run ให้สร้าง runner ใหม่ (กัน handler ค้างข้ามครั้ง)
+      return new Proxy({}, { get(_, prop){ return makeRunner()[prop]; } });
+    })()
+  }
+};
+
+const UNASSIGNED_TEAM_LABEL = "ไม่ได้ระบุ"; // ✅ ต้องตรงกับฝั่ง Code.gs
+const UNASSIGNED_AVATAR = "data:image/svg+xml;utf8," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="12" fill="#e5e7eb"/><text x="12" y="16" font-size="11" text-anchor="middle" fill="#6b7280">?</text></svg>'
+);
+const DEFAULT_TEAM_DROPDOWN_AVATAR = "https://i.pinimg.com/736x/83/bc/8b/83bc8b88cf6bc4b4e04d153a418cde62.jpg";
+let _structureRowSelected = null;
+let _allowedTeams = [];
+let _availableTeams = [];
+let _availableMonths = []; // ✅ เพิ่ม
+let _teamPictureMap = {}; // ✅ value -> รูปโปรไฟล์ทีม (จาก Sheet TEAM)
+let _teamCounts = {}; // ✅ เก็บจำนวนรายการต่อทีมล่าสุด สำหรับแสดงใน dropdown
+let _currentData = null;
+let _currentTitle = "";
+let _selectedMonth = ""; // ✅ เพิ่ม
+let _selectedTeam = ""; // ✅ เพิ่ม
+let _editData = null;
+let _isAdmin = false;
+let _loadDataTimeout = null;
+let _searchTerm = "";
+let _sortColumn = -1;
+let _sortDirection = "asc";
+
+// UID จะถูกกำหนดหลัง LIFF login (ไม่ใช่ const แล้ว เพราะต้อง set หลัง login)
+// หมายเหตุ: ประกาศ UID ไว้ข้างบนแล้วแบบ let ไม่ได้ (เป็น const) → ใช้ตัวแปรใหม่ _uid ที่ set ได้
+let _liffId = "2010125469-vugCvunJ"; // LIFF ID ของระบบนี้
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  bootLiff();
+});
+
+// ✅ LIFF login อยู่ในหน้านี้เลย (ไม่ต้องมี backend.html แยกอีก)
+async function bootLiff(){
+  try{
+    await liff.init({ liffId: _liffId, withLoginOnExternalBrowser: true });
+
+    if (!liff.isLoggedIn()){
+      liff.login({ redirectUri: location.href });
+      return;
+    }
+
+    const profile = await liff.getProfile();
+    const decoded = (liff.getDecodedIDToken && liff.getDecodedIDToken()) || {};
+    const uid = decoded.sub || profile.userId || "";
+    window.__RESOLVED_UID__ = uid; // เก็บ uid ที่ login ได้ ให้ทั้งระบบใช้
+
+    // log การเข้าใช้งาน (ไม่บล็อกการโหลด)
+    if (uid){
+      callApi_("logLiff", [uid, profile.displayName || "", profile.pictureUrl || ""])
+        .catch(()=>{});
+    }
+
+    loadStructure();
+
+  }catch(err){
+    console.error("LIFF error:", err);
+    // ถ้า LIFF ล้มเหลว ยังลองโหลด structure (จะติด auth เองถ้าไม่มี uid)
+    loadStructure();
+  }
+}
+
+function loadStructure(){
+  google.script.run
+    .withSuccessHandler(renderGallery)
+    .withFailureHandler(err => {
+      console.error("getStructure() fail:", err);
+      alert("ไม่สามารถโหลดข้อมูลได้: " + err);
+    })
+    .getStructure();
+}
+
+function renderGallery(rows){
+  const g = document.getElementById("gallery");
+  g.innerHTML = "";
+  
+  if (!rows || !rows.length){ 
+    g.innerHTML = "<p>ยังไม่มีรายการใน Structure</p>"; 
+    return; 
   }
 
-  // พาไปที่ Web App ตรงๆ (ทั้งหน้า ไม่ใช้ iframe) — กันปัญหา X-Frame-Options
-  function goToApp(uid){
-    const usp = new URLSearchParams(location.search);
-    usp.delete("uid");
-    const params = new URLSearchParams(usp);
-    if (uid) params.set("uid", uid);
-    const target = GAS_EXEC_URL + (params.toString() ? ("?" + params.toString()) : "");
+  rows.forEach(r=>{
+    const div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = `<img src="${escapeHtml(r.picture||"")}" alt="">`;
+    div.onclick = ()=>{
+      _structureRowSelected = r.rowIndex;
+      _currentTitle = r.title || "";
+      
+      document.getElementById("galleryView").style.display = "none";
+      document.getElementById("tableView").style.display = "block";
+      document.getElementById("filterZone").innerHTML = "";
+      document.getElementById("tableZone").innerHTML = '<div class="loading">⏳ กำลังโหลด...</div>';
+      
+      google.script.run
+        .withSuccessHandler(handleOpenRowResponse)
+        .withFailureHandler(err => {
+          console.error("openRow() fail:", err);
+          document.getElementById("tableZone").innerHTML = 
+            `<div class="loading" style="color:#dc2626">❌ ${err}</div>`;
+        })
+        .openRow(r.rowIndex, UID);
+    };
+    g.appendChild(div);
+  });
+}
 
-    showManualLink(target);   // เตรียมลิงก์สำรองไว้ก่อน เผื่อ auto redirect โดนบล็อก
-    location.href = target;   // redirect ทั้งหน้า
+// ✅ แก้ไขฟังก์ชัน handleOpenRowResponse
+function handleOpenRowResponse(payload){
+  console.log("openRow response:", payload);
+
+  if (!payload.authorized){
+    showUnauthorizedModal();
+    backToGallery();
+    return;
   }
 
-  (async () => {
-    try {
-      const usp = new URLSearchParams(location.search);
-      usp.delete("uid");
-      const REDIRECT_URI = location.origin + location.pathname + (usp.toString() ? ("?" + usp.toString()) : "");
+  _allowedTeams = payload.allowedTeams || [];
+  _availableTeams = payload.teams || [];
+  _availableMonths = payload.months || [];
+  
+  _isAdmin = _allowedTeams.length === 1 && _allowedTeams[0] === "*";
+  
+  console.log("Allowed teams:", _allowedTeams);
+  console.log("Available teams:", _availableTeams);
+  console.log("Available months:", _availableMonths);
+  console.log("Is Admin:", _isAdmin);
+  
+  if (_availableMonths.length > 0){
+    _selectedMonth = _availableMonths[_availableMonths.length - 1].value;
+  }else{
+    _selectedMonth = "";
+  }
+  
+  _selectedTeam = "";
+  
+  renderFilterDropdown();
+  loadData(_selectedMonth, _selectedTeam);
 
-      const brand = document.getElementById('brandRefresh');
-      brand?.addEventListener('click', (e) => {
-        e.preventDefault();
-        location.replace(REDIRECT_URI);
+  // ✅ ดึงรูปโปรไฟล์ทีมจาก Sheet TEAM มาใช้กับ dropdown (ไม่บล็อกการโหลดข้อมูลหลัก)
+  google.script.run
+    .withSuccessHandler(list=>{
+      _teamPictureMap = {};
+      (list||[]).forEach(t=>{
+        if (t && t.value) _teamPictureMap[String(t.value).trim()] = t.picture || "";
       });
+      renderTeamDropdownList(); // อัพเดทแค่ dropdown ทีม ไม่รีเซ็ตช่องค้นหา
+    })
+    .withFailureHandler(err=>{
+      console.error("getTeamList fail:", err);
+    })
+    .getTeamList();
+}
 
-      await liff.init({ liffId: MY_LIFF_ID, withLoginOnExternalBrowser: true });
 
-      if (!liff.isLoggedIn()) {
-        liff.login({ redirectUri: REDIRECT_URI });
+function showUnauthorizedModal(){
+  document.getElementById("unauthorizedModal").style.display = "flex";
+}
+
+function closeUnauthorizedModal(){
+  document.getElementById("unauthorizedModal").style.display = "none";
+}
+function renderFilterDropdown(){
+  const zone = document.getElementById("filterZone");
+  zone.innerHTML = "";
+
+  /* ---------- กล่อง เดือน ---------- */
+  const wrapMonth = document.createElement("div");
+  wrapMonth.className = "filter-row";
+  wrapMonth.innerHTML = `
+    <label class="filter-label">เดือน</label>
+  `;
+  const monthSel = document.createElement("select");
+  monthSel.id = "monthSelect";
+  monthSel.innerHTML = `<option value="">ทั้งหมด</option>`;
+  _availableMonths.forEach(m=>{
+    const opt = document.createElement("option");
+    opt.value = m.value;
+    opt.textContent = m.label;
+    if (m.value === _selectedMonth) opt.selected = true;
+    monthSel.appendChild(opt);
+  });
+  monthSel.onchange = ()=>{
+    _selectedMonth = monthSel.value;
+    loadData(_selectedMonth, _selectedTeam);
+  };
+  wrapMonth.appendChild(monthSel);
+  zone.appendChild(wrapMonth);
+
+
+  /* ---------- กล่อง ทีม (custom dropdown มีรูป thumbnail) ---------- */
+  const wrapTeam = document.createElement("div");
+  wrapTeam.className = "filter-row";
+  wrapTeam.innerHTML = `
+    <label class="filter-label">ทีม</label>
+  `;
+  const teamDropdown = buildTeamDropdown();
+  wrapTeam.appendChild(teamDropdown);
+  zone.appendChild(wrapTeam);
+
+
+  /* ---------- กล่องค้นหา (ขึ้นบรรทัดใหม่) ---------- */
+  const wrapSearch = document.createElement("div");
+  wrapSearch.className = "filter-row";
+  const searchBox = document.createElement("input");
+  searchBox.type = "text";
+  searchBox.className = "search-box";
+  searchBox.placeholder = "🔍 ค้นหา...";
+  searchBox.value = _searchTerm;
+  searchBox.oninput = (e)=>{
+    _searchTerm = e.target.value;
+    applyFilters();
+  };
+  wrapSearch.appendChild(searchBox);
+  zone.appendChild(wrapSearch);
+
+
+  /* ---------- ปุ่มอยู่บรรทัดล่าง ---------- */
+  const actions = document.createElement("div");
+  actions.className = "filter-actions";
+
+  const exportBtn = document.createElement("button");
+  exportBtn.className = "export-btn";
+  exportBtn.innerHTML = "📥 Export";
+  exportBtn.onclick = exportToCSV;
+  actions.appendChild(exportBtn);
+
+  // if (_isAdmin){
+  //   const dashBtn = document.createElement("button");
+  //   dashBtn.className = "export-btn";
+  //   dashBtn.innerHTML = "📊 Dashboard";
+  //   dashBtn.onclick = openDashboardDefault;
+  //   actions.appendChild(dashBtn);
+  // }
+
+// ✅ ลบเงื่อนไข if (_isAdmin) ออก
+const dashBtn = document.createElement("button");
+dashBtn.className = "export-btn";
+dashBtn.innerHTML = "📊 Dashboard";
+dashBtn.onclick = openDashboardDefault;
+actions.appendChild(dashBtn);
+
+  zone.appendChild(actions);
+}
+
+// ✅ หารูปโปรไฟล์ของทีม (จาก Sheet TEAM) ตามค่า value
+function getTeamAvatarFor(value){
+  if (value === UNASSIGNED_TEAM_LABEL) return UNASSIGNED_AVATAR;
+  const pic = _teamPictureMap[value];
+  return pic || DEFAULT_TEAM_DROPDOWN_AVATAR;
+}
+
+// ✅ สร้าง custom dropdown เลือกทีม (แสดงรูป thumbnail หน้าชื่อ)
+function buildTeamDropdown(){
+  const wrap = document.createElement("div");
+  wrap.className = "team-dropdown";
+  wrap.id = "teamDropdownWrap";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "team-dropdown-btn";
+  btn.id = "teamDropdownBtn";
+
+  const list = document.createElement("div");
+  list.className = "team-dropdown-list";
+  list.id = "teamDropdownList";
+  list.style.display = "none";
+
+  btn.onclick = (e)=>{
+    e.stopPropagation();
+    const isOpening = list.style.display === "none" || !list.style.display;
+    if (isOpening){
+      list.style.display = "block";
+      positionTeamDropdownList(btn, list);
+    }else{
+      list.style.display = "none";
+    }
+  };
+
+  wrap.appendChild(btn);
+  wrap.appendChild(list);
+
+  // ปิด dropdown เมื่อคลิกนอกกล่อง (ผูก event แค่ครั้งเดียวต่อการเปิดตาราง)
+  document.addEventListener("click", (e)=>{
+    if (!wrap.contains(e.target)) list.style.display = "none";
+  });
+  // ปิด dropdown เมื่อเลื่อนจอ/ปรับขนาดจอ กันตำแหน่งเพี้ยนค้าง
+  window.addEventListener("scroll", ()=>{ list.style.display = "none"; }, true);
+  window.addEventListener("resize", ()=>{ list.style.display = "none"; });
+
+  renderTeamDropdownList();
+  return wrap;
+}
+
+// ✅ คำนวณตำแหน่ง dropdown ทีม ให้อยู่ในขอบจอเสมอ (กันล้นขวา/ล้นล่างจนต้องเลื่อนดู)
+function positionTeamDropdownList(btn, list){
+  const rect = btn.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // ให้กว้างอย่างน้อยเท่าปุ่ม แต่ไม่เกินขอบจอ
+  list.style.minWidth = Math.min(Math.max(rect.width, 200), vw - 16) + "px";
+
+  const listWidth = list.offsetWidth || 200;
+  let left = rect.left;
+  if (left + listWidth > vw - 8) left = vw - listWidth - 8; // ล้นขวา → ดันเข้ามา
+  if (left < 8) left = 8; // ล้นซ้าย → ดันเข้ามา
+
+  let top = rect.bottom + 4;
+  const listHeight = Math.min(list.scrollHeight || 280, 280);
+  if (top + listHeight > vh - 8){ // ล้นล่าง → โผล่เหนือปุ่มแทน
+    top = Math.max(8, rect.top - 4 - listHeight);
+  }
+
+  list.style.left = left + "px";
+  list.style.top = top + "px";
+}
+
+// ✅ วาดรายการตัวเลือกในทีม dropdown ใหม่ (เรียกซ้ำได้เมื่อรูป/จำนวนอัพเดท โดยไม่รีเซ็ตช่องค้นหา)
+function renderTeamDropdownList(){
+  const btn = document.getElementById("teamDropdownBtn");
+  const list = document.getElementById("teamDropdownList");
+  if (!btn || !list) return;
+
+  // ✅ ก่อนโหลดข้อมูลครั้งแรก (ยังไม่มี _teamCounts) ให้แสดงทีมทั้งหมดไปก่อน
+  // หลังจากนั้นให้กรองเฉพาะทีมที่ "มีข้อมูลจริงในเดือน/ตัวกรองปัจจุบัน" เท่านั้น
+  // (ทีมที่นับได้ 0 แปลว่าไม่มีรายการในเดือนนี้ ไม่ควรโชว์ให้เลือก)
+  const hasCounts = _teamCounts && Object.keys(_teamCounts).length > 0;
+  const visibleTeams = (_availableTeams || []).filter(v => !hasCounts || (_teamCounts[v] || 0) > 0);
+
+  const options = [{ value:"", label:"ทั้งหมด" }]
+    .concat(visibleTeams.map(v => ({ value:v, label:v })));
+
+  // ปุ่มหลัก (ค่าที่เลือกอยู่)
+  const current = options.find(o => o.value === _selectedTeam) || options[0];
+  const currentAvatar = current.value ? getTeamAvatarFor(current.value) : "";
+  const currentCount = current.value ? (_teamCounts[current.value] || 0) : Object.values(_teamCounts).reduce((s,n)=>s+n,0);
+  btn.innerHTML = `
+    ${currentAvatar ? `<img class="team-dropdown-avatar" src="${escapeHtml(currentAvatar)}" onerror="this.style.display='none'">` : ""}
+    <span>${escapeHtml(current.label)}${hasCounts ? ` (${currentCount})` : ""}</span>
+    <span class="caret">▾</span>
+  `;
+
+  // รายการตัวเลือก
+  list.innerHTML = "";
+  options.forEach(o=>{
+    const item = document.createElement("div");
+    item.className = "team-dropdown-item" + (o.value === _selectedTeam ? " active" : "") + (o.value === UNASSIGNED_TEAM_LABEL ? " unassigned" : "");
+    const count = o.value ? (_teamCounts[o.value] || 0) : Object.values(_teamCounts).reduce((s,n)=>s+n,0);
+    const avatar = o.value ? getTeamAvatarFor(o.value) : "";
+    item.innerHTML = `
+      ${avatar ? `<img src="${escapeHtml(avatar)}" onerror="this.style.display='none'">` : `<span style="width:20px;display:inline-block;"></span>`}
+      <span>${escapeHtml(o.label)}</span>
+      ${hasCounts ? `<span class="count">${count}</span>` : ""}
+    `;
+    item.onclick = ()=>{
+      _selectedTeam = o.value;
+      list.style.display = "none";
+      renderTeamDropdownList();
+      loadData(_selectedMonth, _selectedTeam);
+    };
+    list.appendChild(item);
+  });
+}
+
+function showTable(d){
+  console.log("getData response:", d);
+  
+  _currentData = d;
+  const tz = document.getElementById("tableZone");
+  
+  if (!d || !d.rows || !d.rows.length){
+    tz.innerHTML = "<div class='loading'>ไม่มีข้อมูล</div>";
+    updateDropdownCounts(d.monthCounts || {}, d.teamCounts || {});
+    renderAmountSummary(0);
+    return;
+  }
+
+  updateDropdownCounts(d.monthCounts || {}, d.teamCounts || {});
+
+  google.script.run
+    .withSuccessHandler(amountColIdx => {
+      let totalAmount = 0;
+      
+      if (amountColIdx >= 0){
+        google.script.run
+          .withSuccessHandler(structureData => {
+            const amountColLetter = structureData.amountCol;
+            if (!amountColLetter) {
+              renderAmountSummary(0);
+              return;
+            }
+            
+            const realColIdx = letterToIndexSafe(amountColLetter);
+            const showIdx = structureData.showIdx || [];
+            const displayIdx = showIdx.indexOf(realColIdx);
+            
+            if (displayIdx >= 0 && d.rows){
+              d.rows.forEach(row => {
+                const amountValue = row[displayIdx];
+                if (amountValue){
+                  const cleaned = String(amountValue).replace(/,/g, '').replace(/[^\d.-]/g, '');
+                  const num = parseFloat(cleaned) || 0;
+                  totalAmount += num;
+                }
+              });
+            }
+            
+            renderAmountSummary(totalAmount);
+          })
+          .getStructureInfo(_structureRowSelected, UID);
+      } else {
+        renderAmountSummary(0);
+      }
+    })
+    .getAmountColIndex(_structureRowSelected, UID);
+
+  _sortColumn = -1;
+  _sortDirection = "asc";
+  
+  renderTable(d);
+}
+
+// ✅ ป้องกัน XSS: escape ค่าก่อนแทรกลง innerHTML
+function escapeHtml(str){
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function renderTable(d){
+  hideCellPopup(); // ✅ กันแสดง popup ค้างจากการ render ครั้งก่อน
+  const tz = document.getElementById("tableZone");
+  const picIndices = d.pictureIndices || [];
+  const orderNoIdx = d.orderNoColIndex !== undefined ? d.orderNoColIndex : -1;
+  const checkIdx = d.checkColIndex !== undefined ? d.checkColIndex : -1;
+  const amountIdx = d.amountColIndex !== undefined ? d.amountColIndex : -1;
+  
+  console.log("Column indices:", { orderNoIdx, checkIdx, amountIdx });
+  
+  let filteredRows = d.rows;
+  let rowMapping = d.rows.map((_, idx) => idx);
+  
+  if (_searchTerm.trim()){
+    const term = _searchTerm.toLowerCase();
+    const filtered = [];
+    const mapping = [];
+    
+    d.rows.forEach((r, idx) => {
+      const searchText = r.join(" ").toLowerCase();
+      if (searchText.includes(term)){
+        filtered.push(r);
+        mapping.push(idx);
+      }
+    });
+    
+    filteredRows = filtered;
+    rowMapping = mapping;
+  }
+  
+  if (_sortColumn >= 0 && _sortColumn < d.headers.length){
+    const sorted = filteredRows.map((row, idx) => ({ 
+      row, 
+      originalIdx: rowMapping[idx] 
+    }));
+    
+    sorted.sort((a, b) => {
+      let valA = a.row[_sortColumn] || "";
+      let valB = b.row[_sortColumn] || "";
+      
+      const numA = parseFloat(String(valA).replace(/,/g, '').replace(/[^\d.-]/g, ''));
+      const numB = parseFloat(String(valB).replace(/,/g, '').replace(/[^\d.-]/g, ''));
+      
+      if (!isNaN(numA) && !isNaN(numB)){
+        return _sortDirection === "asc" ? numA - numB : numB - numA;
+      }
+      
+      valA = String(valA).toLowerCase();
+      valB = String(valB).toLowerCase();
+      
+      if (valA < valB) return _sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return _sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+    
+    filteredRows = sorted.map(s => s.row);
+    rowMapping = sorted.map(s => s.originalIdx);
+  }
+  
+  let html = "<table><thead><tr><th>#</th>";
+  
+  d.headers.forEach((h, idx) => {
+    const sortClass = _sortColumn === idx ? `sorted-${_sortDirection}` : '';
+    html += `<th class="${sortClass}" onclick="sortTable(${idx})">
+      ${escapeHtml(h)}
+      <span class="sort-icon"></span>
+    </th>`;
+  });
+  html += "</tr></thead><tbody>";
+
+  if (filteredRows.length === 0){
+    html += `<tr><td colspan="${d.headers.length + 1}" style="text-align:center;color:#6b7280;padding:40px;">ไม่พบข้อมูลที่ค้นหา</td></tr>`;
+  } else {
+    filteredRows.forEach((r, displayIdx) => {
+      const originalIdx = rowMapping[displayIdx];
+      html += "<tr>";
+      html += `<td class="row-num" onclick="showDetail(${originalIdx})">${displayIdx + 1}</td>`;
+      
+      r.forEach((c, i) => {
+        if (picIndices.includes(i) && c){
+          const urls = String(c).split("|").map(u => u.trim()).filter(Boolean);
+          html += `<td style="display:flex;gap:4px;flex-wrap:wrap;">`;
+          urls.forEach(url => {
+            html += `<img class="thumb" src="${escapeHtml(url)}" onclick="event.stopPropagation();openLB('${encodeURIComponent(url)}')">`;
+          });
+          html += `</td>`;
+        }
+        else if (i === amountIdx && amountIdx >= 0){
+          const cleaned = String(c || "").replace(/,/g, '').replace(/[^\d.-]/g, '');
+          const num = parseFloat(cleaned);
+          
+          if (!isNaN(num) && num !== 0){
+            const formatted = num.toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            });
+            html += `<td>💰 ${formatted}</td>`;
+          }else{
+            html += `<td>${escapeHtml(c ?? "")}</td>`;
+          }
+        }
+        else if (i === orderNoIdx && orderNoIdx >= 0 && checkIdx >= 0){
+          const checkValue = String(r[checkIdx] || "").trim();
+          let cellContent = escapeHtml(c ?? "");
+          
+          if (!checkValue){
+            html += `<td>${cellContent}</td>`;
+          }
+          else if (checkValue === "✅"){
+            html += `<td style="color:#10b981;font-weight:600;">✓ ${cellContent}</td>`;
+          }
+          else if (checkValue.startsWith("❌")){
+            html += `<td style="color:#dc2626;text-decoration:line-through;">✕ ${cellContent}</td>`;
+          }
+          else if (checkValue.includes("รอตรวจ")){
+            html += `<td style="color:#f59e0b;">⏱ ${cellContent}</td>`;
+          }
+          else {
+            html += `<td>${cellContent}</td>`;
+          }
+        }
+        else {
+          // ✅ จำกัดความกว้างคอลัมน์ข้อความยาว + ไอคอน Font Awesome บอกว่ามีข้อความซ่อน + คลิกดูเต็ม (escape กัน XSS)
+          const safeVal = escapeHtml(c ?? "");
+          html += `<td><span class="cell-truncate" onclick="handleCellClick(event, this)" data-full="${safeVal}"><span class="cell-text">${safeVal}</span><i class="fa-solid fa-circle-info cell-more-icon"></i></span></td>`;
+        }
+      });
+      html += "</tr>";
+    });
+  }
+
+  html += "</tbody></table>";
+  tz.innerHTML = html;
+
+  // ✅ วัดว่าคอลัมน์ไหนถูกตัดจริง (ล้นพื้นที่) แล้วค่อยโชว์ไอคอน "มีข้อความซ่อน"
+  attachCellTruncateHandlers();
+}
+
+// ✅ ตรวจสอบทุก cell ที่ถูกจำกัดความกว้าง ว่าเนื้อหาล้นจริงไหม ถ้าล้นให้โชว์ไอคอนคลิกดูเต็ม
+function attachCellTruncateHandlers(){
+  document.querySelectorAll("#tableZone .cell-truncate").forEach(el=>{
+    const textEl = el.querySelector(".cell-text");
+    if (!textEl) return;
+    const isOverflowing = textEl.scrollWidth > textEl.clientWidth + 1;
+    el.classList.toggle("has-more", isOverflowing);
+  });
+}
+
+// ✅ คลิกที่ cell ที่มีข้อความถูกตัด → เปิด popup แสดงข้อความเต็ม (คัดลอกได้ ปิดง่าย)
+function handleCellClick(event, el){
+  if (!el.classList.contains("has-more")) return; // ไม่ได้ถูกตัด ไม่ต้องทำอะไร
+  event.stopPropagation();
+  const fullText = el.getAttribute("data-full") || "";
+  const rect = el.getBoundingClientRect();
+  showCellPopup(rect, fullText);
+}
+
+// ✅ สร้าง/แสดง popup ข้อความเต็ม พร้อมปุ่มคัดลอกและปิด
+let _cellPopupEl = null;
+function ensureCellPopup(){
+  if (_cellPopupEl) return _cellPopupEl;
+  const el = document.createElement("div");
+  el.className = "cell-popup";
+  el.innerHTML = `
+    <div class="cell-popup-text"></div>
+    <div class="cell-popup-actions">
+      <button type="button" class="btn-copy"><i class="fa-regular fa-copy"></i> คัดลอก</button>
+      <button type="button" class="btn-close-popup"><i class="fa-solid fa-xmark"></i> ปิด</button>
+    </div>
+  `;
+  document.body.appendChild(el);
+  el.querySelector(".btn-close-popup").onclick = ()=> hideCellPopup();
+  el.querySelector(".btn-copy").onclick = (e)=>{
+    const text = el.querySelector(".cell-popup-text").textContent;
+    copyTextToClipboard(text);
+    const btn = e.currentTarget;
+    const original = btn.innerHTML;
+    btn.innerHTML = `<i class="fa-solid fa-check"></i> คัดลอกแล้ว`;
+    setTimeout(()=>{ btn.innerHTML = original; }, 1500);
+  };
+  // คลิกนอกกล่อง = ปิด
+  document.addEventListener("click", (e)=>{
+    if (_cellPopupEl && _cellPopupEl.style.display === "block" && !_cellPopupEl.contains(e.target)){
+      hideCellPopup();
+    }
+  });
+  // กด Esc = ปิด
+  document.addEventListener("keydown", (e)=>{
+    if (e.key === "Escape") hideCellPopup();
+  });
+  _cellPopupEl = el;
+  return el;
+}
+
+function showCellPopup(anchorRect, text){
+  const el = ensureCellPopup();
+  el.querySelector(".cell-popup-text").textContent = text;
+  el.style.display = "block";
+
+  // จัดตำแหน่งให้อยู่ใกล้ cell ที่คลิก และไม่ล้นจอ
+  const popupWidth = Math.min(360, window.innerWidth * 0.86);
+  let left = anchorRect.left;
+  let top = anchorRect.bottom + 6;
+  if (left + popupWidth > window.innerWidth - 8) left = window.innerWidth - popupWidth - 8;
+  if (left < 8) left = 8;
+  if (top + 160 > window.innerHeight){ // ถ้าล้นด้านล่าง ให้โชว์เหนือ cell แทน
+    top = Math.max(8, anchorRect.top - 6 - 160);
+  }
+  el.style.left = left + "px";
+  el.style.top = top + "px";
+  el.style.width = popupWidth + "px";
+}
+
+function hideCellPopup(){
+  if (_cellPopupEl) _cellPopupEl.style.display = "none";
+}
+
+// ✅ คัดลอกข้อความ รองรับทั้งเบราว์เซอร์ใหม่และเก่า/webview ของ LIFF
+function copyTextToClipboard(text){
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).catch(()=> fallbackCopy(text));
+  }else{
+    fallbackCopy(text);
+  }
+}
+function fallbackCopy(text){
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try{ document.execCommand("copy"); }catch(e){ console.error("copy fallback failed", e); }
+  document.body.removeChild(ta);
+}
+
+function sortTable(colIdx){
+  // ถ้าคลิกคอลัมน์เดิม → สลับทิศทาง
+  if (_sortColumn === colIdx){
+    _sortDirection = _sortDirection === "asc" ? "desc" : "asc";
+  } 
+  // ถ้าคลิกคอลัมน์ใหม่ → เริ่มด้วย asc
+  else {
+    _sortColumn = colIdx;
+    _sortDirection = "asc";
+  }
+  
+  // Render ใหม่
+  renderTable(_currentData);
+}
+
+function applyFilters(){
+  if (!_currentData) return;
+  renderTable(_currentData);
+}
+
+// ✅ แก้ไข loadData ให้มี debounce
+function loadData(month, team){
+  // ยกเลิกการเรียกครั้งก่อน (ถ้ามี)
+  if (_loadDataTimeout){
+    clearTimeout(_loadDataTimeout);
+  }
+  
+  // รอ 300ms ก่อนเรียกจริง
+  _loadDataTimeout = setTimeout(() => {
+    console.log("Loading data with month:", month, "team:", team);
+    
+    document.getElementById("tableZone").innerHTML = '<div class="loading">⏳ กำลังโหลด...</div>';
+    
+    google.script.run
+      .withSuccessHandler(showTable)
+      .withFailureHandler(err => {
+        console.error("getData() fail:", err);
+        document.getElementById("tableZone").innerHTML =
+          `<div class="loading" style="color:#dc2626">❌ ${err}</div>`;
+      })
+      .getData(_structureRowSelected, team || "", month || "", UID);
+  }, 300);
+}
+
+
+// ✅ Helper function สำหรับ frontend
+function letterToIndexSafe(L){
+  const s = String(L||"").trim().toUpperCase();
+  if (!/^[A-Z]+$/.test(s)) return -1;
+  let result = 0;
+  for(let i = 0; i < s.length; i++){
+    result = result * 26 + (s.charCodeAt(i) - 64);
+  }
+  return result - 1;
+}
+
+function renderAmountSummary(amount){
+  let summaryDiv = document.getElementById("amountSummary");
+  
+  if (!summaryDiv){
+    summaryDiv = document.createElement("div");
+    summaryDiv.id = "amountSummary";
+    summaryDiv.className = "amount-summary";
+    
+    // ✅ แก้ไข: ใส่ไว้ต้นสุดของ tableView
+    const filterZone = document.getElementById("filterZone");
+    filterZone.parentElement.insertBefore(summaryDiv, filterZone);
+  }
+  
+  const formatted = amount.toLocaleString('th-TH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+  
+  // ✅ แก้ไข: เพิ่มชื่อเข้าไป
+  summaryDiv.innerHTML = `
+    <div class="icon">💰</div>
+    <div class="content">
+      <div class="label">ยอดขาย ${escapeHtml(_currentTitle)}</div>
+      <div class="value">${formatted} บาท</div>
+    </div>
+  `;
+}
+
+function updateDropdownCounts(monthCounts, teamCounts){
+  // ✅ อัพเดท Month Dropdown
+  const monthSel = document.getElementById("monthSelect");
+  if (monthSel && _availableMonths.length > 0){
+    // คำนวณจำนวนรวมทั้งหมด (ใช้สำหรับ "ทั้งหมด")
+    let totalMonthCount = 0;
+    _availableMonths.forEach(m => {
+      const count = monthCounts[m.value] || 0;
+      totalMonthCount += count;
+    });
+    
+    // อัพเดทแต่ละ option
+    Array.from(monthSel.options).forEach(opt => {
+      if (opt.value === ""){
+        opt.textContent = `ทั้งหมด (${totalMonthCount})`;
+      }else{
+        const m = _availableMonths.find(x => x.value === opt.value);
+        if (m){
+          const count = monthCounts[m.value] || 0;
+          opt.textContent = `${m.label} (${count})`;
+        }
+      }
+    });
+  }
+
+  // ✅ อัพเดท Team Dropdown (custom dropdown ที่มีรูป thumbnail)
+  _teamCounts = teamCounts || {};
+
+  // ✅ ถ้าทีมที่เลือกอยู่ ไม่มีข้อมูลในเดือน/ตัวกรองปัจจุบันแล้ว (เช่น เปลี่ยนเดือนแล้วทีมนั้นหายไป)
+  // ให้รีเซ็ตกลับเป็น "ทั้งหมด" อัตโนมัติ กันตารางว่างเปล่าโดยไม่รู้สาเหตุ
+  if (_selectedTeam && !(_teamCounts[_selectedTeam] > 0)){
+    _selectedTeam = "";
+    renderTeamDropdownList();
+    loadData(_selectedMonth, _selectedTeam);
+    return;
+  }
+
+  renderTeamDropdownList();
+}
+
+function showDetail(rowIdx){
+  if (!_currentData || !_currentData.rows[rowIdx]) return;
+  
+  const row = _currentData.rows[rowIdx];
+  const headers = _currentData.headers;
+  const picIndices = _currentData.pictureIndices || [];
+  
+  document.getElementById("detailTitle").textContent = `รายละเอียดแถวที่ ${rowIdx+1}`;
+  
+  let html = "";
+  headers.forEach((h,i)=>{
+    const val = row[i] || "-";
+    html += `<div class="detail-row">
+      <div class="detail-label">${escapeHtml(h)}:</div>
+      <div class="detail-value">`;
+    
+    if (picIndices.includes(i) && val && val !== "-"){
+      const urls = String(val).split("|").map(u => u.trim()).filter(Boolean);
+      urls.forEach(url => {
+        html += `<img src="${escapeHtml(url)}" onclick="event.stopPropagation();openLBFromDetail('${encodeURIComponent(url)}')">`;
+      });
+    }else{
+      html += escapeHtml(val);
+    }
+    
+    html += `</div></div>`;
+  });
+  
+  document.getElementById("detailBody").innerHTML = html;
+  
+  const actionsDiv = document.querySelector("#detailModal .modal-actions");
+  if (actionsDiv) actionsDiv.remove();
+  
+  const newActions = document.createElement("div");
+  newActions.className = "modal-actions";
+  newActions.style.marginTop = "20px";
+  
+  if (_isAdmin){
+    const verifyBtn = document.createElement("button");
+    verifyBtn.className = "btn-verify";
+    verifyBtn.textContent = "🔍 ตรวจสอบ";
+    verifyBtn.onclick = () => openEditModal(rowIdx);
+    newActions.appendChild(verifyBtn);
+  }
+  
+  const closeBtn = document.createElement("button");
+  closeBtn.onclick = closeDetailModal;
+  closeBtn.textContent = "ปิด";
+  closeBtn.style.background = "#6b7280";
+  closeBtn.style.color = "#fff";
+  newActions.appendChild(closeBtn);
+  
+  document.querySelector("#detailModal .modal-content").appendChild(newActions);
+  document.getElementById("detailModal").style.display = "flex";
+}
+
+function openLBFromDetail(enc){
+  // ✅ ไม่ปิด modal แต่เปิด lightbox ทับด้านบน
+  const u = decodeURIComponent(enc); 
+  document.getElementById("lbImg").src = u; 
+  document.getElementById("lb").style.display="flex"; 
+}
+
+function closeDetailModal(){
+  document.getElementById("detailModal").style.display = "none";
+}
+
+function openLB(enc){ 
+  const u = decodeURIComponent(enc); 
+  document.getElementById("lbImg").src = u; 
+  document.getElementById("lb").style.display="flex"; 
+}
+
+function backToGallery(){
+  // ปิด popup/modal ที่อาจค้างอยู่
+  hideCellPopup();
+  const editM = document.getElementById("editModal"); if (editM) editM.style.display = "none";
+  const detailM = document.getElementById("detailModal"); if (detailM) detailM.style.display = "none";
+  const dashM = document.getElementById("dashboardModal"); if (dashM) dashM.style.display = "none";
+
+  document.getElementById("tableView").style.display = "none";
+  document.getElementById("galleryView").style.display = "block";
+  _structureRowSelected = null;
+  _allowedTeams = [];
+  _availableTeams = [];
+  _availableMonths = [];
+  _teamPictureMap = {};
+  _teamCounts = {};
+  _currentData = null;
+  _currentTitle = "";
+  _selectedMonth = "";
+  _selectedTeam = "";
+  _searchTerm = "";
+  _sortColumn = -1;
+  _sortDirection = "asc";
+}
+
+function exportToCSV(){
+  if (!_currentData || !_currentData.rows || !_currentData.rows.length){
+    alert("ไม่มีข้อมูลให้ Export");
+    return;
+  }
+  
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = "⏳ กำลังสร้างไฟล์...";
+  
+  google.script.run
+    .withSuccessHandler(result => {
+      btn.disabled = false;
+      btn.textContent = "📥 Export CSV";
+      
+      if (result.success){
+        if (confirm("✅ สร้างไฟล์สำเร็จ!\n\nต้องการเปิดไฟล์หรือไม่?")){
+          window.open(result.url, "_blank");
+        }
+      }else{
+        alert("❌ ไม่สามารถสร้างไฟล์ได้: " + (result.error || "Unknown error"));
+      }
+    })
+    .withFailureHandler(err => {
+      btn.disabled = false;
+      btn.textContent = "📥 Export CSV";
+      alert("❌ เกิดข้อผิดพลาด: " + err);
+    })
+    .exportToSheets(_currentData, _currentTitle, UID);
+}
+
+function openEditModal(rowIdx){
+  closeDetailModal();
+  
+  // ✅ ตรวจสอบว่ามีข้อมูล
+  if (!_currentData || !_currentData.rows || !_currentData.rows[rowIdx]){
+    alert("❌ ไม่พบข้อมูลแถวที่เลือก");
+    return;
+  }
+  
+  document.getElementById("editBody").innerHTML = '<div class="loading">⏳ กำลังโหลด...</div>';
+  document.getElementById("editModal").style.display = "flex";
+  
+  // ✅ ส่งข้อมูลแถวที่เลือกไปด้วย
+  const currentRowData = _currentData.rows[rowIdx];
+  
+  google.script.run
+    .withSuccessHandler(data => {
+      if (!data.success){
+        alert("❌ " + (data.error || "ไม่สามารถโหลดข้อมูลได้"));
+        closeEditModal();
         return;
       }
-
-      const profile = await liff.getProfile();
-      const decoded = liff.getDecodedIDToken?.() || {};
-      const uid = decoded.sub || profile.userId || "";
-
-      if (uid) {
-        fetch(GAS_EXEC_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            action: "logLiff",
-            userId: uid,
-            displayName: profile.displayName || "",
-            pictureUrl: profile.pictureUrl || ""
-          })
-        }).catch(() => {});
+      renderEditForm(data, rowIdx);
+    })
+    .withFailureHandler(err => {
+      alert("❌ เกิดข้อผิดพลาด: " + err);
+      closeEditModal();
+    })
+    .getEditData(_structureRowSelected, rowIdx, currentRowData, UID);
+}
+function renderEditForm(data, rowIdx){
+  _editData = data;
+  _editData.originalRowIndex = rowIdx;
+  
+  let html = "";
+  
+  data.fields.forEach(field => {
+    const isLocked = field.locked;
+    
+    html += `<div class="edit-field ${isLocked ? 'locked' : ''}">`;
+    html += `<label>${escapeHtml(field.header)}</label>`;
+    
+    if (field.type === "team"){
+      html += `<select id="field_${field.colIndex}" ${isLocked ? 'disabled' : ''}>`;
+      html += `<option value="">-- เลือกทีม --</option>`;
+      data.teamList.forEach(team => {
+        const selected = field.value === team.value ? 'selected' : '';
+        html += `<option value="${escapeHtml(team.value)}" data-picture="${escapeHtml(team.picture)}" ${selected}>${escapeHtml(team.label)}</option>`;
+      });
+      html += `</select>`;
+      
+      const currentTeam = data.teamList.find(t => t.value === field.value);
+      if (currentTeam && currentTeam.picture){
+        html += `<img src="${escapeHtml(currentTeam.picture)}" class="preview" id="team_preview_${field.colIndex}">`;
       }
-
-      goToApp(uid);
-
-    } catch (e) {
-      console.error("LIFF error:", e);
-      loading.innerHTML = '<div class="spinner"></div>ไม่สามารถเชื่อมต่อ LINE ได้ กำลังพาเข้าระบบ...';
-      goToApp("");
+      
+    } else if (field.type === "check"){
+      const [status, remark] = field.value.split("|").map(s => s.trim());
+      
+      html += `<select id="field_${field.colIndex}" ${isLocked ? 'disabled' : ''} onchange="toggleRemarkField(${field.colIndex})">`;
+      
+      const isEmpty = !status || status === "";
+      html += `<option value="" ${isEmpty ? 'selected' : ''}>-- ไม่ระบุ --</option>`;
+      
+      data.checkOptions.forEach(opt => {
+        const selected = status === opt ? 'selected' : '';
+        html += `<option value="${escapeHtml(opt)}" ${selected}>${escapeHtml(opt)}</option>`;
+      });
+      html += `</select>`;
+      
+      const showRemark = status === "❌";
+      html += `<div class="check-remark" id="remark_${field.colIndex}" style="display:${showRemark ? 'block' : 'none'}">`;
+      html += `<input type="text" id="remark_text_${field.colIndex}" placeholder="ระบุหมายเหตุ..." value="${escapeHtml(remark || '')}" ${isLocked ? 'readonly' : ''}>`;
+      html += `</div>`;
+      
+    } else if (field.type === "amount"){
+      const numValue = parseFloat(field.value.replace(/,/g, '')) || 0;
+      html += `<input type="number" id="field_${field.colIndex}" value="${numValue}" step="0.01" ${isLocked ? 'readonly' : ''}>`;
+      
+    } else {
+      // ✅ แก้ไขส่วนนี้: แยก URL ภาพ
+      if (field.locked && field.value.includes("http")){
+        const urls = field.value.split("|").map(u => u.trim()).filter(Boolean);
+        urls.forEach(url => {
+          html += `<img src="${escapeHtml(url)}" class="preview" style="margin-right:8px;">`;
+        });
+      } else {
+        html += `<input type="text" id="field_${field.colIndex}" value="${escapeHtml(field.value)}" ${isLocked ? 'readonly' : ''}>`;
+      }
     }
-  })();
-</script>
+    
+    html += `</div>`;
+  });
+  
+  document.getElementById("editBody").innerHTML = html;
+  
+  // Event listener สำหรับ Team dropdown
+  data.fields.forEach(field => {
+    if (field.type === "team"){
+      const select = document.getElementById(`field_${field.colIndex}`);
+      if (select){
+        select.addEventListener("change", function(){
+          const selectedOption = this.options[this.selectedIndex];
+          const picture = selectedOption.getAttribute("data-picture");
+          const preview = document.getElementById(`team_preview_${field.colIndex}`);
+          
+          if (preview){
+            if (picture){
+              preview.src = picture;
+              preview.style.display = "block";
+            } else {
+              preview.style.display = "none";
+            }
+          } else if (picture){
+            const img = document.createElement("img");
+            img.src = picture;
+            img.className = "preview";
+            img.id = `team_preview_${field.colIndex}`;
+            select.parentElement.appendChild(img);
+          }
+        });
+      }
+    }
+  });
+}
+// Toggle หมายเหตุเมื่อเลือก ❌
+function toggleRemarkField(colIndex){
+  const select = document.getElementById(`field_${colIndex}`);
+  const remarkDiv = document.getElementById(`remark_${colIndex}`);
+  
+  if (select && remarkDiv){
+    remarkDiv.style.display = select.value === "❌" ? "block" : "none";
+  }
+}
 
+// บันทึกการแก้ไข
+function saveEdit(){
+  if (!_editData) return;
+  
+  const updates = {};
+  
+  _editData.fields.forEach(field => {
+    if (field.locked) return; // ข้ามฟิลด์ที่ล็อค
+    
+    const input = document.getElementById(`field_${field.colIndex}`);
+    if (!input) return;
+    
+    let newValue = "";
+    
+    if (field.type === "check"){
+      const status = input.value;
+      const remarkInput = document.getElementById(`remark_text_${field.colIndex}`);
+      const remark = remarkInput ? remarkInput.value.trim() : "";
+      
+      newValue = status;
+      if (status === "❌" && remark){
+        newValue = `${status} | ${remark}`;
+      }
+      
+    } else if (field.type === "amount"){
+      const num = parseFloat(input.value) || 0;
+      newValue = num; // ✅ ส่งเป็นตัวเลขธรรมดา backend จะ format เอง
+      
+    } else {
+      newValue = input.value;
+    }
+    
+    // เก็บเฉพาะที่เปลี่ยนแปลง
+    const originalValue = field.value.replace(/,/g, ''); // เอา comma ออกก่อนเทียบ
+    const newValueStr = String(newValue).replace(/,/g, '');
+    
+    if (newValueStr !== originalValue){
+      updates[field.colIndex] = {
+        value: newValue,
+        type: field.type // ✅ ส่ง type ไปด้วย
+      };
+    }
+  });
+  
+  if (Object.keys(updates).length === 0){
+    alert("ℹ️ ไม่มีการเปลี่ยนแปลงข้อมูล");
+    return;
+  }
+  
+  console.log("Saving updates:", updates);
+  
+  const saveBtn = document.querySelector(".btn-save");
+  saveBtn.disabled = true;
+  saveBtn.textContent = "⏳ กำลังบันทึก...";
+
+  // ✅ ตัวกันปุ่มค้าง: ถ้าบันทึกนานเกิน 20 วิ (เช่นเน็ตช้า/หลุด) ให้คืนปุ่มกลับมาใช้ได้พร้อมแจ้งเตือน
+  let _saveSettled = false;
+  const saveWatchdog = setTimeout(()=>{
+    if (_saveSettled) return;
+    _saveSettled = true;
+    saveBtn.disabled = false;
+    saveBtn.textContent = "💾 บันทึก";
+    alert("⚠️ การบันทึกใช้เวลานานผิดปกติ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง");
+  }, 20000);
+  
+  google.script.run
+    .withSuccessHandler(result => {
+      if (_saveSettled) return; // watchdog ทำงานไปแล้ว ไม่ต้องทำซ้ำ
+      _saveSettled = true;
+      clearTimeout(saveWatchdog);
+
+      saveBtn.disabled = false;
+      saveBtn.textContent = "💾 บันทึก";
+      
+      if (result.success){
+        alert("✅ บันทึกสำเร็จ!" + (result.savedAt ? `\nเวลาบันทึก: ${result.savedAt}` : ""));
+        closeEditModal();
+        // ✅ Reload ข้อมูลใหม่
+        loadData(_selectedMonth, _selectedTeam);
+      } else {
+        alert("❌ " + (result.error || "ไม่สามารถบันทึกได้"));
+      }
+    })
+    .withFailureHandler(err => {
+      if (_saveSettled) return;
+      _saveSettled = true;
+      clearTimeout(saveWatchdog);
+
+      saveBtn.disabled = false;
+      saveBtn.textContent = "💾 บันทึก";
+      alert("❌ เกิดข้อผิดพลาด: " + err);
+    })
+    .saveEditData(
+      _editData.targetSheetId,
+      _editData.targetSheetName,
+      _editData.targetRowIndex,
+      updates,
+      UID
+    );
+}
+
+function closeEditModal(){
+  document.getElementById("editModal").style.display = "none";
+  _editData = null;
+} 
+const DEFAULT_TEAM_AVATAR = "https://i.pinimg.com/736x/83/bc/8b/83bc8b88cf6bc4b4e04d153a418cde62.jpg";
+
+function openDashboardDefault(){
+  if (!_structureRowSelected){
+    alert("กรุณาเลือกการ์ดจากหน้าแรกก่อน แล้วค่อยกด Dashboard");
+    return;
+  }
+  // เปิดป๊อปอัพ
+  document.getElementById("dashboardModal").style.display = "flex";
+
+  // ตั้งค่าเดือนเริ่มต้น = เดือนล่าสุด
+  const dashSel = document.getElementById("dashMonth");
+  dashSel.innerHTML = `<option value="">ทั้งหมด</option>`;
+  if (_availableMonths && _availableMonths.length){
+    _availableMonths.forEach(m=>{
+      const opt = document.createElement("option");
+      opt.value = m.value;
+      opt.textContent = m.label;
+      dashSel.appendChild(opt);
+    });
+    dashSel.value = _availableMonths[_availableMonths.length - 1].value;
+    runDashboard([dashSel.value]); // แสดงผลเดือนล่าสุดทันที
+  }else{
+    runDashboard([]); // ไม่มีรายการเดือน → รวมทั้งหมด
+  }
+
+  // เปลี่ยนเดือนในป๊อปอัพ -> สร้างใหม่
+  dashSel.onchange = ()=>{
+    const v = dashSel.value;
+    const months = v ? [v] : [];
+    runDashboard(months);
+  };
+}
+
+function closeDashboard(){
+  document.getElementById("dashboardModal").style.display = "none";
+}
+
+function runDashboard(months){
+  const body = document.getElementById("dashBody");
+  body.innerHTML = '<div class="loading">⏳ สร้างแดชบอร์ด...</div>';
+
+  google.script.run
+    .withSuccessHandler(async d => {
+      // ดึงรูปทีมจาก TEAM sheet
+      google.script.run
+        .withSuccessHandler(teamList=>{
+          renderDashboard(d, teamList || []);
+        })
+        .withFailureHandler(err=>{
+          console.error("getTeamList fail:", err);
+          renderDashboard(d, []); // เรนเดอร์ต่อได้ โดยไม่มีรูป
+        })
+        .getTeamList();
+    })
+    .withFailureHandler(err => {
+      console.error(err);
+      body.innerHTML = `<div class="loading" style="color:#dc2626">❌ ${err}</div>`;
+    })
+    .getDashboardData(_structureRowSelected, months || [], UID);
+}
+
+function renderDashboard(d, teamList){
+  const body = document.getElementById("dashBody");
+  if (!d || d.error){
+    body.innerHTML = `<div class="loading" style="color:#dc2626">❌ ${escapeHtml(d?.error || "ไม่สามารถสร้างแดชบอร์ดได้")}</div>`;
+    return;
+  }
+
+  // ===== สรุปบนสุด
+  const fmt  = (n)=> (Number(n)||0).toLocaleString('th-TH', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const fmt0 = (n)=> (Number(n)||0).toLocaleString('th-TH');
+
+  let html = `
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px">
+    <div class="amount-summary"><div class="icon">💰</div><div class="content">
+      <div class="label">ยอดรวม (${escapeHtml(d.monthsLabel)})</div>
+      <div class="value">${fmt(d.totalAmount)} บาท</div>
+    </div></div>
+    <div class="amount-summary" style="background:linear-gradient(135deg,#34d399,#10b981)">
+      <div class="icon">🧾</div><div class="content">
+        <div class="label">จำนวนรายการ</div>
+        <div class="value">${fmt0(d.totalCount)} รายการ</div>
+      </div>
+    </div>
+  </div>`;
+
+  // ===== กราฟยอดตามเดือน (bar แบบง่าย)
+  if (d.byMonth && d.byMonth.length){
+    const maxAmt = Math.max(...d.byMonth.map(x=>x.amount||0), 1);
+    html += `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:16px">
+      <div style="font-weight:700;margin-bottom:8px">ยอดตามเดือน</div>
+      <div style="display:grid;gap:8px">`;
+    d.byMonth.forEach(m=>{
+      const w = Math.round((m.amount / maxAmt) * 100);
+      html += `
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280">
+            <span>${escapeHtml(m.label)}</span><span>${fmt(m.amount)} บาท</span>
+          </div>
+          <div style="height:10px;background:#f3f4f6;border-radius:999px;overflow:hidden">
+            <div style="height:100%;width:${w}%;background:#3b82f6"></div>
+          </div>
+        </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  // ===== อันดับทีม (การ์ด + รูป)
+  const pictureMap = {};
+  (teamList||[]).forEach(t=>{
+    // t.value = Value, t.label = Label, t.picture = line_picture_url
+    if (t && t.value){
+      pictureMap[String(t.value).trim()] = t.picture || "";
+    }
+  });
+
+  if (d.byTeam && d.byTeam.length){
+    const maxAmtT = Math.max(...d.byTeam.map(x=>x.amount||0), 1);
+    html += `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px">
+      <div style="font-weight:700;margin-bottom:8px">อันดับทีม</div>
+      <div class="team-grid">`;
+
+    d.byTeam.forEach((t,i)=>{
+      const teamVal = String(t.team||"").trim();    // team ที่มาจากคอลัมน์ Value
+      const avatar = pictureMap[teamVal] || DEFAULT_TEAM_AVATAR;
+      const barW = Math.round((t.amount / maxAmtT) * 100);
+
+      html += `
+      <div class="team-card">
+        <img src="${escapeHtml(avatar)}" onerror="this.src='${DEFAULT_TEAM_AVATAR}'" alt="">
+        <div class="team-meta">
+          <div class="name">#${i+1} ${escapeHtml(teamVal || "-")}</div>
+          <div class="sub">รายการ: ${fmt0(t.count)} | ยอดรวม: ${fmt(t.amount)} บาท</div>
+          <div class="team-bar"><div class="fill" style="width:${barW}%"></div></div>
+        </div>
+      </div>`;
+    });
+
+    html += `</div></div>`;
+  }
+
+  body.innerHTML = html;
+}
+
+
+
+</script>
 </body>
 </html>
