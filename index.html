@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blissé Global</title>
+<link rel="icon" type="image/x-icon" href="/BLISSE/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/BLISSE/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/BLISSE/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/BLISSE/apple-touch-icon.png">
+<link rel="manifest" href="/BLISSE/site.webmanifest">
+<style>
+    /* ตั้งค่าพื้นฐานให้หน้าเว็บ */
+    body {
+        margin: 0;
+        padding: 0;
+        background-color: #ffffff; /* พื้นหลังสีขาวล้วน */
+        display: flex;
+        justify-content: center; /* จัดกึ่งกลางแนวนอน */
+    }
+
+    /* กล่องสำหรับใส่รูปภาพ */
+    .gallery-container {
+        width: 100%;
+        max-width: 1200px; /* กำหนดความกว้างสูงสุด */
+        display: flex;
+        flex-direction: column; /* เรียงภาพจากบนลงล่าง */
+        align-items: center; /* จัดภาพให้อยู่กึ่งกลาง */
+
+        box-sizing: border-box;
+    }
+
+    /* ตั้งค่ารูปภาพให้ Responsive */
+    .gallery-container img {
+        width: 100%;
+        max-width: 800px; /* ควบคุมไม่ให้ภาพใหญ่เกินไปเมื่อเปิดบนจอคอม */
+        height: auto; /* รักษาสัดส่วนภาพ */
+        display: block;
+    }
+</style>
+</head>
+<body>
+
+    <div class="gallery-container">
+        <!-- ภาพที่ 1 -->
+        <img src="https://lh3.googleusercontent.com/d/1NGYUkriWZTBxuE8bHZkXLht86NEIhkQQ" alt="Blissé Global Image 1">
+        
+        <!-- ภาพที่ 2 -->
+        <img src="https://lh3.googleusercontent.com/d/1_is5gDvSifEkCu6rRbK1ph6zILIllPrf" alt="Blissé Global Image 2">
+        
+        <!-- ภาพที่ 3 -->
+        <img src="https://lh3.googleusercontent.com/d/11YRNQdVSSJ-qs5Jcsev1j1xc5Y8J6xV1" alt="Blissé Global Image 3">
+    </div>
+
+</body>
+</html>
