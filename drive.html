@@ -2,13 +2,21 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Blissé Exclusive Storage</title>
-<link rel="icon" type="image/x-icon" href="/BLISSE/favicon.ico">
-<link rel="icon" type="image/png" sizes="32x32" href="/BLISSE/favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/BLISSE/favicon-16x16.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/BLISSE/apple-touch-icon.png">
-<link rel="manifest" href="/BLISSE/site.webmanifest">
+
+<!-- Web App / PWA Standalone (Save to Screen) -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Blissé Drive">
+<meta name="theme-color" content="#ffffff">
+
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -17,7 +25,15 @@
   :root{
     --bg:#ffffff; --text:#171717; --border:#f0f0f0; --thumb-h:160px;
   }
-  body{ font-family:'Prompt',sans-serif; background:var(--bg); color:var(--text); }
+  body{
+    font-family:'Prompt',sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    padding-top: max(1.5rem, env(safe-area-inset-top));
+    padding-bottom: max(2rem, env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
   .card-clean{ transition:all .3s ease; border:1px solid var(--border); }
   .card-clean:hover{ transform:translateY(-3px); box-shadow:0 12px 30px -8px rgba(0,0,0,.08); }
   .loader{ border:2px solid #f3f3f3; border-top:2px solid var(--text); border-radius:50%; width:24px; height:24px; animation:spin 1s linear infinite; }
