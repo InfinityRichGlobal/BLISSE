@@ -87,9 +87,31 @@
     <p class="font-light text-sm">กำลังโหลดคลังไฟล์...</p>
   </div>
 
-  <div id="pending-state" class="hidden flex flex-col items-center justify-center py-32 text-gray-400 text-center">
-    <i class="fa-solid fa-hourglass-half text-3xl mb-4"></i>
-    <p class="font-light text-sm">บัญชีของคุณกำลังรอการอนุญาตจากแอดมิน</p>
+  <div id="pending-state" class="hidden flex flex-col items-center justify-center py-24 px-4 text-center max-w-sm mx-auto">
+    <div id="pending-avatar-box" class="w-16 h-16 rounded-full overflow-hidden mb-3 border-2 border-gray-100 shadow-sm mx-auto hidden">
+      <img id="pending-avatar-img" src="" class="w-full h-full object-cover">
+    </div>
+    <h4 id="pending-name" class="font-medium text-base text-gray-800 mb-1"></h4>
+    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-light bg-amber-50 text-amber-700 border border-amber-200/60 mb-3">
+      <i class="fa-solid fa-hourglass-half text-[11px] animate-pulse"></i>
+      <span>บัญชีของคุณกำลังรอการอนุญาตจากแอดมิน</span>
+    </div>
+    <p class="font-light text-xs text-gray-400 leading-relaxed mb-6">
+      ระบบได้ส่งคำขอเข้าใช้งานถึงแอดมินแล้ว<br/>เมื่อได้รับการอนุมัติ คลังสื่อจะเปิดขึ้นโดยอัตโนมัติ
+    </p>
+    <div class="flex flex-col w-full gap-2.5">
+      <button id="btn-request-access" onclick="handleNotifyAdminAgain()" class="w-full py-2.5 px-4 bg-[#06c755] hover:bg-[#05b34c] text-white rounded-xl text-xs font-medium transition-all shadow-sm flex items-center justify-center gap-2">
+        <i class="fa-solid fa-bell text-xs"></i>
+        <span id="btn-request-text">แจ้งเตือนแอดมินเพื่อขออนุมัติ</span>
+      </button>
+      <button onclick="checkApprovalStatus(true)" class="w-full py-2.5 px-4 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-2">
+        <i class="fa-solid fa-arrows-rotate text-xs"></i>
+        <span>ตรวจสอบสถานะตอนนี้</span>
+      </button>
+      <button onclick="logoutSession()" class="text-[11px] text-gray-400 hover:text-gray-600 underline mt-2">
+        สลับบัญชี LINE / ออกจากระบบ
+      </button>
+    </div>
   </div>
 
 </div>
@@ -205,49 +227,239 @@ let STATE = {
   activeType: 'all', activeTags: new Set(), untaggedOnly: false, hiddenOnly: false, viewAsUser: false, pendingUsers: [], currentSet: [], lightboxIndex: 0
 };
 
-// ---------------- LIFF BOOTSTRAP ----------------
-async function boot(){
-  document.getElementById('loading-state').classList.remove('hidden');
-  document.getElementById('gallery').innerHTML = '';
-  document.getElementById('pending-state').classList.add('hidden');
-  document.getElementById('filter-bar').classList.add('hidden');
+const SESSION_KEY = 'blisse_storage_session';
 
-  // 1) โหลด config แบบ public ก่อน (ยังไม่ต้อง login)
-  const pre = await api('bootstrap');
-  applyTheme(pre.config);
+function getSavedSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
 
-  // 2) LIFF init + login
-  try{
-    await liff.init({ liffId: pre.config.liff_channel_id });
-    if(!liff.isLoggedIn()){ liff.login(); return; }
-    const profile = await liff.getProfile();
-    STATE.uid = profile.userId; STATE.profile = profile;
-    await api('log', { uid: profile.userId, displayName: profile.displayName, pictureUrl: profile.pictureUrl }, true);
-  }catch(err){
-    console.error('LIFF error', err);
+function saveSession(profile) {
+  try {
+    if (profile && profile.userId) {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(profile));
+    }
+  } catch(e) {}
+}
+
+function logoutSession() {
+  if (confirm('คุณต้องการสลับบัญชี LINE หรือออกจากระบบใช่หรือไม่?')) {
+    try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+    try { if (typeof liff !== 'undefined' && liff.isLoggedIn()) liff.logout(); } catch(e) {}
+    location.reload();
+  }
+}
+
+let _approvalPollTimer = null;
+
+function renderPendingUI() {
+  const p = STATE.profile;
+  const avatarBox = document.getElementById('pending-avatar-box');
+  const avatarImg = document.getElementById('pending-avatar-img');
+  const nameEl = document.getElementById('pending-name');
+
+  if (p && p.pictureUrl) {
+    avatarImg.src = p.pictureUrl;
+    avatarBox.classList.remove('hidden');
+  } else {
+    avatarBox.classList.add('hidden');
   }
 
-  // 3) โหลดข้อมูลจริงตามสิทธิ์
-  const data = await api('bootstrap', { uid: STATE.uid });
-  STATE.role = data.role; STATE.approved = data.approved;
-  STATE.config = data.config; STATE.tags = data.tags; STATE.files = data.files;
-  STATE.showCounts = data.showCounts;
-  applyTheme(data.config);
+  if (p && p.displayName) {
+    nameEl.textContent = 'คุณ ' + p.displayName;
+  } else {
+    nameEl.textContent = 'สวัสดีครับ';
+  }
+}
+
+async function checkApprovalStatus(isManual) {
+  if (!STATE.uid) return;
+  if (isManual) {
+    toast('กำลังตรวจสอบสถานะการอนุมัติ...');
+  }
+  try {
+    const data = await api('bootstrap', { uid: STATE.uid });
+    if (data.approved) {
+      if (_approvalPollTimer) { clearInterval(_approvalPollTimer); _approvalPollTimer = null; }
+      toast('🎉 ยินดีด้วยค่ะ บัญชีของคุณได้รับการอนุมัติแล้ว!');
+      STATE.role = data.role;
+      STATE.approved = data.approved;
+      STATE.config = data.config;
+      STATE.tags = data.tags;
+      STATE.files = data.files;
+      STATE.showCounts = data.showCounts;
+      document.getElementById('pending-state').classList.add('hidden');
+      if(STATE.role === 'admin'){
+        document.getElementById('admin-buttons').style.display = 'flex';
+        updateShortcutToggleBtn();
+      }
+      document.getElementById('filter-bar').classList.remove('hidden');
+      renderFilters();
+      applyFilters();
+    } else if (isManual) {
+      toast('ยังอยู่ระหว่างรอการอนุมัติจากแอดมินค่ะ', 'warn');
+    }
+  } catch(e) {
+    if (isManual) toast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ชั่วคราว', 'err');
+  }
+}
+
+async function handleNotifyAdminAgain() {
+  const btn = document.getElementById('btn-request-access');
+  const txt = document.getElementById('btn-request-text');
+  if (!STATE.uid) { toast('กรุณาเข้าสู่ระบบ LINE ก่อนแจ้งเตือน', 'err'); return; }
+
+  btn.disabled = true;
+  txt.textContent = 'กำลังส่งคำขอ...';
+  try {
+    const res = await api('requestAccess', {
+      uid: STATE.uid,
+      displayName: (STATE.profile && STATE.profile.displayName) || '',
+      pictureUrl: (STATE.profile && STATE.profile.pictureUrl) || ''
+    });
+    if (res && res.alreadyApproved) {
+      toast('บัญชีของคุณได้รับการอนุมัติแล้ว! กำลังเข้าสู่ระบบ...');
+      await checkApprovalStatus(false);
+      return;
+    }
+    toast('ส่งคำขอถึงแอดมินเรียบร้อยแล้วค่ะ แอดมินจะกดอนุมัติให้โดยเร็ว');
+    txt.textContent = 'ส่งคำขอแล้ว ✓';
+    setTimeout(() => {
+      btn.disabled = false;
+      txt.textContent = 'แจ้งเตือนแอดมินเพื่อขออนุมัติอีกครั้ง';
+    }, 15000);
+  } catch(e) {
+    toast('ส่งคำขอไม่สำเร็จ กรุณาลองใหม่', 'err');
+    btn.disabled = false;
+    txt.textContent = 'แจ้งเตือนแอดมินเพื่อขออนุมัติ';
+  }
+}
+
+// ---------------- FAST LIFF BOOTSTRAP & CACHING ----------------
+const DEFAULT_LIFF_ID = "2010125469-sBA18Ipc";
+const CACHE_DRIVE_KEY = 'blisse_drive_cache';
+
+function getCachedDrive() {
+  try {
+    const raw = localStorage.getItem(CACHE_DRIVE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+
+function setCachedDrive(data) {
+  try {
+    if (data && data.approved) {
+      localStorage.setItem(CACHE_DRIVE_KEY, JSON.stringify(data));
+    }
+  } catch(e) {}
+}
+
+function applyDriveData(data) {
+  STATE.role = data.role;
+  STATE.approved = data.approved;
+  STATE.config = data.config || {};
+  STATE.tags = data.tags || [];
+  STATE.files = data.files || [];
+  STATE.showCounts = !!data.showCounts;
+
+  if (data.config) applyTheme(data.config);
 
   document.getElementById('loading-state').classList.add('hidden');
 
-  if(!STATE.approved){
+  if (!STATE.approved) {
     document.getElementById('pending-state').classList.remove('hidden');
+    document.getElementById('filter-bar').classList.add('hidden');
+    document.getElementById('gallery').innerHTML = '';
+    renderPendingUI();
+    if (!_approvalPollTimer) {
+      _approvalPollTimer = setInterval(() => checkApprovalStatus(false), 20000);
+    }
     return;
   }
-  if(STATE.role === 'admin'){
+
+  document.getElementById('pending-state').classList.add('hidden');
+  if (STATE.role === 'admin') {
     document.getElementById('admin-buttons').style.display = 'flex';
     updateShortcutToggleBtn();
+  } else {
+    document.getElementById('admin-buttons').style.display = 'none';
   }
 
   document.getElementById('filter-bar').classList.remove('hidden');
   renderFilters();
   applyFilters();
+}
+
+async function boot(){
+  if (_approvalPollTimer) { clearInterval(_approvalPollTimer); _approvalPollTimer = null; }
+
+  // 1) ดึง Persistent Session จากเครื่องก่อน (ถ้ามี แปลว่าเคยล็อกอิน LINE แล้ว)
+  const saved = getSavedSession();
+  if (saved && saved.userId) {
+    STATE.uid = saved.userId;
+    STATE.profile = saved;
+  }
+
+  // 2) FAST-PATH: แสดงผลจาก LocalStorage Cache ทันทีใน 0.05 วินาที สำหรับแอดมิน/สมาชิกเดิม
+  const cached = getCachedDrive();
+  let renderedFromCache = false;
+  if (cached && STATE.uid && cached.approved) {
+    applyDriveData(cached);
+    renderedFromCache = true;
+  } else {
+    document.getElementById('loading-state').classList.remove('hidden');
+    document.getElementById('pending-state').classList.add('hidden');
+  }
+
+  // 3) LIFF Init ทันทีโดยไม่ต้องรอ API เพื่อให้คนใหม่เด้ง Login ทันใจ (ไม่เกิน 0.2 วิ)
+  const liffChannelId = (cached && cached.config && cached.config.liff_channel_id) || DEFAULT_LIFF_ID;
+  let liffLoggedIn = false;
+
+  try {
+    await liff.init({ liffId: liffChannelId, withLoginOnExternalBrowser: true });
+    liffLoggedIn = liff.isLoggedIn();
+    if (liffLoggedIn) {
+      const profile = await liff.getProfile();
+      STATE.uid = profile.userId;
+      STATE.profile = profile;
+      saveSession(profile);
+      // ส่ง Log บันทึกการเข้าใช้งานแบบ background ไม่บล็อกหน้าจอ
+      api('log', { uid: profile.userId, displayName: profile.displayName, pictureUrl: profile.pictureUrl }, true).catch(()=>{});
+    } else if (!STATE.uid) {
+      // ผู้ใช้ใหม่ที่ยังไม่เคย login และไม่มี session -> เด้ง LINE Login ทันที!
+      liff.login();
+      return;
+    }
+  } catch(err) {
+    console.warn('LIFF init warning:', err);
+  }
+
+  // 4) ถ้าไม่มีทั้ง UID จาก LIFF และไม่มี Session ให้แสดงหน้า Pending/Login
+  if (!STATE.uid) {
+    document.getElementById('loading-state').classList.add('hidden');
+    document.getElementById('pending-state').classList.remove('hidden');
+    renderPendingUI();
+    return;
+  }
+
+  // 5) Sync ข้อมูลจริงจาก Google Apps Script (ทำรอบเดียว พร้อม UID)
+  try {
+    const data = await api('bootstrap', { uid: STATE.uid });
+    if (data.approved) {
+      setCachedDrive(data);
+    } else {
+      try { localStorage.removeItem(CACHE_DRIVE_KEY); } catch(e) {}
+    }
+    applyDriveData(data);
+  } catch(err) {
+    console.error('bootstrap fetch error:', err);
+    if (!renderedFromCache) {
+      document.getElementById('loading-state').classList.add('hidden');
+      toast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ชั่วคราว', 'err');
+    }
+  }
 }
 
 function applyTheme(cfg){
