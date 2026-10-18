@@ -12,6 +12,10 @@
 <meta name="apple-mobile-web-app-title" content="Blissé Drive">
 <meta name="theme-color" content="#ffffff">
 
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com">
+<link rel="preconnect" href="https://static.line-scdn.net" crossorigin>
+<link rel="preconnect" href="https://lh3.googleusercontent.com">
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
@@ -101,6 +105,31 @@
   <div id="loading-state" class="flex flex-col items-center justify-center py-32 text-gray-400">
     <div class="loader mb-4"></div>
     <p class="font-light text-sm">กำลังโหลดคลังไฟล์...</p>
+  </div>
+
+  <!-- LOGIN STATE (แสดงเมื่อยังไม่เข้าสู่ระบบ LINE หรือเปิดจากบราวเซอร์ภายนอก) -->
+  <div id="login-state" class="hidden flex flex-col items-center justify-center py-20 px-4 text-center max-w-sm mx-auto">
+    <div class="w-16 h-16 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center mb-4 shadow-sm text-[#06c755] text-3xl">
+      <i class="fa-brands fa-line"></i>
+    </div>
+    <h3 class="font-medium text-lg text-gray-900 mb-1">Blissé Exclusive Storage</h3>
+    <p class="font-light text-xs text-gray-500 mb-6 leading-relaxed">
+      ระบบคลังไฟล์สื่อเอ็กซ์คลูซีฟสำหรับทีมงาน<br/>กรุณาเข้าสู่ระบบด้วย LINE เพื่อเข้าใช้งาน
+    </p>
+    <div class="flex flex-col w-full gap-2.5">
+      <button onclick="triggerLineLogin()" class="w-full py-3 px-4 bg-[#06c755] hover:bg-[#05b34c] text-white rounded-xl text-xs font-medium transition-all shadow-sm flex items-center justify-center gap-2">
+        <i class="fa-brands fa-line text-base"></i>
+        <span>เข้าสู่ระบบด้วย LINE</span>
+      </button>
+      <a href="https://liff.line.me/2010125469-sBA18Ipc" class="w-full py-2.5 px-4 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-2">
+        <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+        <span>เปิดผ่านแอป LINE (แนะนำ)</span>
+      </a>
+      <button onclick="boot()" class="w-full py-2.5 px-4 bg-white hover:bg-gray-50 text-gray-500 border border-gray-200 rounded-xl text-xs font-light transition-all flex items-center justify-center gap-2">
+        <i class="fa-solid fa-arrows-rotate text-xs"></i>
+        <span>รีเฟรชหน้าเว็บ</span>
+      </button>
+    </div>
   </div>
 
   <div id="pending-state" class="hidden flex flex-col items-center justify-center py-24 px-4 text-center max-w-sm mx-auto">
@@ -247,25 +276,84 @@ const SESSION_KEY = 'blisse_storage_session';
 
 function getSavedSession() {
   try {
+    const params = new URLSearchParams(window.location.search);
+    const urlUid = params.get('uid');
     const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const saved = raw ? JSON.parse(raw) : null;
+    if (saved && saved.userId) return saved;
+    if (urlUid && /^U[0-9a-f]{32}$/i.test(urlUid.trim())) {
+      return { userId: urlUid.trim(), displayName: '', pictureUrl: '' };
+    }
+    return null;
   } catch(e) { return null; }
 }
 
 function saveSession(profile) {
   try {
     if (profile && profile.userId) {
-      localStorage.setItem(SESSION_KEY, JSON.stringify(profile));
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        userId: profile.userId,
+        displayName: profile.displayName || '',
+        pictureUrl: profile.pictureUrl || ''
+      }));
     }
   } catch(e) {}
 }
 
-function logoutSession() {
-  if (confirm('คุณต้องการสลับบัญชี LINE หรือออกจากระบบใช่หรือไม่?')) {
-    try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
-    try { if (typeof liff !== 'undefined' && liff.isLoggedIn()) liff.logout(); } catch(e) {}
-    location.reload();
+function clearStaleOAuthParams() {
+  try {
+    const s = window.location.search || '';
+    if (/[?&](code|state|error|liffClientId|liffRedirectUri)=/.test(s)) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  } catch(e) {}
+}
+
+function clearLiffLoginTmp() {
+  try {
+    Object.keys(sessionStorage).forEach(k => {
+      if (k.indexOf('LIFF_STORE:') === 0 && k.indexOf(':loginTmp') !== -1) {
+        sessionStorage.removeItem(k);
+      }
+    });
+  } catch(e) {}
+}
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
+  ]);
+}
+
+function triggerLineLogin() {
+  try {
+    clearStaleOAuthParams();
+    clearLiffLoginTmp();
+    if (typeof liff !== 'undefined') {
+      try {
+        if (liff.isLoggedIn() && !STATE.uid) {
+          liff.logout();
+        }
+      } catch(e) {}
+      liff.login({ redirectUri: window.location.origin + window.location.pathname });
+      return;
+    }
+  } catch(e) {
+    console.warn('liff.login fallback:', e);
   }
+  window.location.href = 'https://liff.line.me/' + DEFAULT_LIFF_ID;
+}
+
+function logoutSession() {
+  STATE.uid = null;
+  STATE.profile = null;
+  try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+  try { localStorage.removeItem(CACHE_DRIVE_KEY); } catch(e) {}
+  clearLiffLoginTmp();
+  clearStaleOAuthParams();
+  try { if (typeof liff !== 'undefined' && liff.isLoggedIn()) liff.logout(); } catch(e) {}
+  showLogin();
 }
 
 let _approvalPollTimer = null;
@@ -300,20 +388,8 @@ async function checkApprovalStatus(isManual) {
     if (data.approved) {
       if (_approvalPollTimer) { clearInterval(_approvalPollTimer); _approvalPollTimer = null; }
       toast('🎉 ยินดีด้วยค่ะ บัญชีของคุณได้รับการอนุมัติแล้ว!');
-      STATE.role = data.role;
-      STATE.approved = data.approved;
-      STATE.config = data.config;
-      STATE.tags = data.tags;
-      STATE.files = data.files;
-      STATE.showCounts = data.showCounts;
-      document.getElementById('pending-state').classList.add('hidden');
-      if(STATE.role === 'admin'){
-        document.getElementById('admin-buttons').style.display = 'flex';
-        updateShortcutToggleBtn();
-      }
-      document.getElementById('filter-bar').classList.remove('hidden');
-      renderFilters();
-      applyFilters();
+      setCachedDrive(data);
+      applyDriveData(data);
     } else if (isManual) {
       toast('ยังอยู่ระหว่างรอการอนุมัติจากแอดมินค่ะ', 'warn');
     }
@@ -372,6 +448,25 @@ function setCachedDrive(data) {
   } catch(e) {}
 }
 
+// ---- ซ่อนทุก state ก่อน แล้วค่อยเปิดตัวที่ต้องการ ----
+function hideAllStates(){
+  document.getElementById('loading-state').classList.add('hidden');
+  document.getElementById('login-state').classList.add('hidden');
+  document.getElementById('pending-state').classList.add('hidden');
+}
+
+function showLogin(){
+  hideAllStates();
+  document.getElementById('filter-bar').classList.add('hidden');
+  document.getElementById('gallery').innerHTML = '';
+  document.getElementById('login-state').classList.remove('hidden');
+}
+
+function showLoading(){
+  hideAllStates();
+  document.getElementById('loading-state').classList.remove('hidden');
+}
+
 function applyDriveData(data) {
   STATE.role = data.role;
   STATE.approved = data.approved;
@@ -382,7 +477,7 @@ function applyDriveData(data) {
 
   if (data.config) applyTheme(data.config);
 
-  document.getElementById('loading-state').classList.add('hidden');
+  hideAllStates();
 
   if (!STATE.approved) {
     document.getElementById('pending-state').classList.remove('hidden');
@@ -408,72 +503,138 @@ function applyDriveData(data) {
   applyFilters();
 }
 
+async function initLiffSafe(liffId) {
+  if (typeof liff === 'undefined') return false;
+  try {
+    await withTimeout(liff.init({ liffId: liffId }), 4500);
+    clearStaleOAuthParams();
+    return true;
+  } catch (err) {
+    console.warn('LIFF init attempt 1 warning:', err);
+    const hasOAuthParams = /[?&](code|state|error|liffClientId)=/.test(window.location.search || '');
+    if (hasOAuthParams) {
+      clearStaleOAuthParams();
+      clearLiffLoginTmp();
+      try {
+        await withTimeout(liff.init({ liffId: liffId }), 4000);
+        return true;
+      } catch (err2) {
+        console.warn('LIFF init retry warning:', err2);
+      }
+    }
+    return false;
+  }
+}
+
+// ============================================================
+// BOOT — เร็วและตรงไปตรงมา: ตรวจ userId → มีก็โหลดคลังไฟล์ / ไม่มีก็แสดงปุ่ม Login
+// ============================================================
 async function boot(){
   if (_approvalPollTimer) { clearInterval(_approvalPollTimer); _approvalPollTimer = null; }
 
-  // 1) ดึง Persistent Session จากเครื่องก่อน (ถ้ามี แปลว่าเคยล็อกอิน LINE แล้ว)
+  // 1) ดึง session เดิมจากเครื่อง (ถ้าเคย login สำเร็จมาก่อน)
   const saved = getSavedSession();
   if (saved && saved.userId) {
     STATE.uid = saved.userId;
     STATE.profile = saved;
   }
 
-  // 2) FAST-PATH: แสดงผลจาก LocalStorage Cache ทันทีใน 0.05 วินาที สำหรับแอดมิน/สมาชิกเดิม
+  // 2) แสดง cache ทันทีถ้ามี (ผู้ใช้เดิมเห็นหน้าจอทันทีใน 0.01 วิ)
   const cached = getCachedDrive();
   let renderedFromCache = false;
   if (cached && STATE.uid && cached.approved) {
     applyDriveData(cached);
     renderedFromCache = true;
   } else {
-    document.getElementById('loading-state').classList.remove('hidden');
-    document.getElementById('pending-state').classList.add('hidden');
+    showLoading();
   }
 
-  // 3) LIFF Init ทันทีโดยไม่ต้องรอ API เพื่อให้คนใหม่เด้ง Login ทันใจ (ไม่เกิน 0.2 วิ)
-  const liffChannelId = (cached && cached.config && cached.config.liff_channel_id) || DEFAULT_LIFF_ID;
-  let liffLoggedIn = false;
+  // 3) ถ้ามี userId เดิมอยู่แล้ว ยิงดึงข้อมูลคลังไฟล์จาก Server ล่วงหน้าทันทีควบคู่กับ LIFF init (ไม่ต้องรอ LIFF)
+  let prestartedUid = STATE.uid || null;
+  let bootstrapPromise = prestartedUid ? api('bootstrap', { uid: prestartedUid }) : null;
 
-  try {
-    await liff.init({ liffId: liffChannelId, withLoginOnExternalBrowser: true });
-    liffLoggedIn = liff.isLoggedIn();
-    if (liffLoggedIn) {
-      const profile = await liff.getProfile();
-      STATE.uid = profile.userId;
-      STATE.profile = profile;
-      saveSession(profile);
-      // ส่ง Log บันทึกการเข้าใช้งานแบบ background ไม่บล็อกหน้าจอ
-      api('log', { uid: profile.userId, displayName: profile.displayName, pictureUrl: profile.pictureUrl }, true).catch(()=>{});
-    } else if (!STATE.uid) {
-      // ผู้ใช้ใหม่ที่ยังไม่เคย login และไม่มี session -> เด้ง LINE Login ทันที!
-      liff.login();
-      return;
+  // 4) LIFF init พร้อม Timeout ป้องกันหน้าเว็บค้าง
+  const liffOk = await initLiffSafe(DEFAULT_LIFF_ID);
+  if (liffOk) {
+    try {
+      // ดึง userId ทันทีจาก ID Token หรือ Context (ใช้เวลา 0ms ไม่ต้องรอเรียก API)
+      const idToken = (liff.getDecodedIDToken && liff.getDecodedIDToken()) || null;
+      const ctx = (liff.getContext && liff.getContext()) || null;
+      const fastUid = (idToken && idToken.sub) || (ctx && ctx.userId) || null;
+
+      if (fastUid) {
+        const fastProfile = {
+          userId: fastUid,
+          displayName: (idToken && idToken.name) || (STATE.profile && STATE.profile.displayName) || '',
+          pictureUrl: (idToken && idToken.picture) || (STATE.profile && STATE.profile.pictureUrl) || ''
+        };
+        STATE.uid = fastUid;
+        STATE.profile = fastProfile;
+        saveSession(fastProfile);
+
+        // อัปเดตชื่อและรูปโปรไฟล์ล่าสุดแบบ Background โดยไม่บล็อกการโหลดคลังไฟล์
+        if (liff.isLoggedIn()) {
+          liff.getProfile().then(p => {
+            if (p && p.userId) {
+              STATE.profile = p;
+              saveSession(p);
+              if (!STATE.approved) renderPendingUI();
+            }
+          }).catch(() => {});
+        }
+      } else if (liff.isLoggedIn()) {
+        try {
+          const profile = await withTimeout(liff.getProfile(), 4000);
+          if (profile && profile.userId) {
+            STATE.uid = profile.userId;
+            STATE.profile = profile;
+            saveSession(profile);
+          }
+        } catch (profErr) {
+          console.warn('LIFF getProfile warning:', profErr);
+          if (!STATE.uid) {
+            try { liff.logout(); } catch(e) {}
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('LIFF profile extraction warning:', e);
     }
-  } catch(err) {
-    console.warn('LIFF init warning:', err);
   }
 
-  // 4) ถ้าไม่มีทั้ง UID จาก LIFF และไม่มี Session ให้แสดงหน้า Pending/Login
+  // 5) ถ้ายังไม่มี userId → แสดงหน้าปุ่ม Login / รีเฟรช ให้กดเองชัดเจน ไม่เด้งวนลูป
   if (!STATE.uid) {
-    document.getElementById('loading-state').classList.add('hidden');
-    document.getElementById('pending-state').classList.remove('hidden');
-    renderPendingUI();
+    showLogin();
     return;
   }
 
-  // 5) Sync ข้อมูลจริงจาก Google Apps Script (ทำรอบเดียว พร้อม UID)
+  // 6) มี userId แล้ว → รอผลลัพธ์ข้อมูลคลังไฟล์จาก Server
   try {
-    const data = await api('bootstrap', { uid: STATE.uid });
+    const data = (bootstrapPromise && prestartedUid === STATE.uid)
+      ? await bootstrapPromise
+      : await api('bootstrap', { uid: STATE.uid });
+
     if (data.approved) {
       setCachedDrive(data);
     } else {
       try { localStorage.removeItem(CACHE_DRIVE_KEY); } catch(e) {}
     }
     applyDriveData(data);
+
+    // 7) บันทึก Log การเข้าใช้งานหลังจากโหลดคลังไฟล์เสร็จแล้ว (ไม่ให้แย่งคิว Spreadsheet ตอนเปิดเว็บ)
+    setTimeout(() => {
+      const p = STATE.profile || {};
+      api('log', {
+        uid: STATE.uid,
+        displayName: p.displayName || '',
+        pictureUrl: p.pictureUrl || ''
+      }, true).catch(() => {});
+    }, 1500);
   } catch(err) {
-    console.error('bootstrap fetch error:', err);
+    console.error('bootstrap error:', err);
     if (!renderedFromCache) {
-      document.getElementById('loading-state').classList.add('hidden');
-      toast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ชั่วคราว', 'err');
+      hideAllStates();
+      toast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ชั่วคราว กรุณากดรีเฟรชอีกครั้ง', 'err');
     }
   }
 }
@@ -1595,7 +1756,7 @@ async function bulkSetTagVisibility(visibility){
   renderTagPicker(); renderManageFilters();
 }
 
-window.onload = boot;
+boot();
 </script>
 </body>
 </html>
